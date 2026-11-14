@@ -1,0 +1,40 @@
+{
+  "nome": "Appartamento di esempio",
+  "altezza_muri": 280,
+  "muri": [
+    { "da": [0, 0], "a": [1000, 0], "spessore": 30 },
+    { "da": [1000, 0], "a": [1000, 800], "spessore": 30 },
+    { "da": [1000, 800], "a": [0, 800], "spessore": 30 },
+    { "da": [0, 800], "a": [0, 0], "spessore": 30 },
+    { "da": [600, 0], "a": [600, 450], "spessore": 10 },
+    { "da": [0, 450], "a": [1000, 450], "spessore": 10 },
+    { "da": [400, 450], "a": [400, 800], "spessore": 10 },
+    { "da": [400, 570], "a": [1000, 570], "spessore": 10 },
+    { "da": [650, 570], "a": [650, 800], "spessore": 10 }
+  ],
+  "porte": [
+    { "pos": [500, 450], "larghezza": 80, "tipo": "porta" },
+    { "pos": [850, 450], "larghezza": 80, "tipo": "porta" },
+    { "pos": [600, 225], "larghezza": 200, "tipo": "varco" },
+    { "pos": [400, 510], "larghezza": 80, "tipo": "porta" },
+    { "pos": [525, 570], "larghezza": 70, "tipo": "porta" },
+    { "pos": [820, 570], "larghezza": 80, "tipo": "porta" },
+    { "pos": [1000, 510], "larghezza": 90, "tipo": "porta" }
+  ],
+  "finestre": [
+    { "pos": [300, 0], "larghezza": 160 },
+    { "pos": [800, 0], "larghezza": 120 },
+    { "pos": [0, 625], "larghezza": 120 },
+    { "pos": [825, 800], "larghezza": 120 },
+    { "pos": [525, 800], "larghezza": 60, "davanzale": 120, "altezza": 80 },
+    { "pos": [0, 225], "larghezza": 120 }
+  ],
+  "stanze": [
+    { "nome": "Soggiorno", "pos": [300, 225] },
+    { "nome": "Cucina", "pos": [800, 225] },
+    { "nome": "Disimpegno", "pos": [700, 510] },
+    { "nome": "Camera", "pos": [200, 625] },
+    { "nome": "Bagno", "pos": [525, 685] },
+    { "nome": "Cameretta", "pos": [825, 685] }
+  ]
+}
