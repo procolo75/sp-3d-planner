@@ -6,7 +6,7 @@ import { offsetOnWall, redo, undo, useStore, type SnapPoint } from '../model/sto
 import type { Item, Opening, Project } from '../model/types';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
-import { itemCorners, magnetToWall, openingDistances, wallDistances } from './snapping';
+import { faceOffset, itemCorners, magnetToWall, openingDistances, wallDistances } from './snapping';
 
 const st0 = () => useStore.getState();
 
@@ -150,6 +150,12 @@ export function Editor2D() {
         if (d < NODE_SNAP_PX / z && (!best || d < best.d)) best = { id: n.id, d };
       }
       if (best) return { x: pr.nodes[best.id].x, y: pr.nodes[best.id].y, nodeId: best.id };
+      // 1b. punti di aggancio: metà di ogni muro
+      for (const w of Object.values(pr.walls)) {
+        if (w.a === opts.exclude || w.b === opts.exclude) continue;
+        const m = v((pr.nodes[w.a].x + pr.nodes[w.b].x) / 2, (pr.nodes[w.a].y + pr.nodes[w.b].y) / 2);
+        if (dist(m, p) < NODE_SNAP_PX / z) return { x: m.x, y: m.y, wallId: w.id };
+      }
 
       let q = { ...p };
       const guides: V[][] = [];
@@ -534,7 +540,9 @@ export function Editor2D() {
           const h = hoverRef.current;
           if (L && s) {
             const dir = h && dist(h, s) > 0.5 ? norm(sub(h, s)) : v(1, 0);
-            const end = add(s, mul(dir, L));
+            // la misura parte dalla faccia del muro a cui è agganciato, non dal suo asse
+            const off = s.nodeId || s.wallId ? faceOffset(st.project, derRef.current.corners, s, dir) : 0;
+            const end = add(s, mul(dir, L + off));
             st.addWallSegment(s, end);
             setDrawStart({ x: end.x, y: end.y });
           }
@@ -692,6 +700,21 @@ export function Editor2D() {
         {tool === 'select' &&
           Object.values(project.nodes).map((n) => <circle key={n.id} cx={n.x} cy={n.y} r={fs(selection?.kind === 'node' && selection.id === n.id ? 5 : 3)} fill="#fff" stroke="#2f7de1" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
 
+        {/* punti di aggancio: estremi e metà dei muri */}
+        {tool === 'wall' &&
+          Object.values(project.walls).flatMap((w) => {
+            const A = project.nodes[w.a];
+            const B = project.nodes[w.b];
+            return [
+              <rect key={w.id + 'm'} x={(A.x + B.x) / 2 - fs(3)} y={(A.y + B.y) / 2 - fs(3)} width={fs(6)} height={fs(6)} fill="#fff" stroke="#e76f51" strokeWidth={1.2} vectorEffect="non-scaling-stroke" transform={`rotate(45 ${(A.x + B.x) / 2} ${(A.y + B.y) / 2})`} />,
+            ];
+          })}
+        {tool === 'wall' && Object.values(project.nodes).map((n) => <circle key={n.id} cx={n.x} cy={n.y} r={fs(3.5)} fill="#fff" stroke="#e76f51" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />)}
+        {/* agganciando a metà di un muro: distanze lungo il muro fino ai muri vicini */}
+        {tool === 'wall' && hover?.wallId && project.walls[hover.wallId] && (
+          <WallDistances items={openingDistances(project, der.corners, { wallId: hover.wallId, offset: offsetOnWall(project, hover.wallId, hover), width: 0 })} z={z} />
+        )}
+
         {/* disegno muro */}
         {tool === 'wall' && hover && (
           <>
@@ -700,7 +723,7 @@ export function Editor2D() {
               <>
                 <line x1={drawStart.x} y1={drawStart.y} x2={hover.x} y2={hover.y} stroke="#2f7de1" strokeWidth={useStore.getState().wallThickness} strokeOpacity={0.5} />
                 <text x={(drawStart.x + hover.x) / 2} y={(drawStart.y + hover.y) / 2 - fs(10)} fontSize={fs(13)} textAnchor="middle" fill="#1b5fb8" fontWeight={700} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: fs(3) }}>
-                  {typed ? `${typed}▏` : fmtLen(dist(drawStart, hover))}
+                  {typed ? `${typed}▏` : fmtLen(clearLength(project, der, drawStart, hover))}
                 </text>
               </>
             )}
@@ -737,7 +760,7 @@ export function Editor2D() {
       </svg>
 
       <div className="hint">
-        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro')}
+        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: si misura dalla faccia del muro a cui agganci · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
         {(tool === 'door' || tool === 'window' || tool === 'arch') && 'Clicca su un muro per inserire'}
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
         {tool === 'place' && 'Clicca per posizionare il mobile (si aggancia ai muri; Shift = libero)'}
@@ -797,6 +820,16 @@ function clamp(x: number, a: number, b: number) {
 
 export function fmtLen(cm: number) {
   return (cm / 100).toFixed(2).replace('.', ',');
+}
+
+/** lunghezza netta di un muro in disegno: da faccia a faccia dei muri a cui è agganciato */
+function clearLength(p: Project, der: Derived, s: SnapPoint, e: SnapPoint) {
+  const L = dist(s, e);
+  if (L < 0.5) return L;
+  const dir = norm(sub(e, s));
+  const a = s.nodeId || s.wallId ? faceOffset(p, der.corners, s, dir) : 0;
+  const b = e.nodeId || e.wallId ? faceOffset(p, der.corners, e, mul(dir, -1)) : 0;
+  return Math.max(0, L - a - b);
 }
 
 function nearestWall(p: Project, at: V, maxD: number): string | null {

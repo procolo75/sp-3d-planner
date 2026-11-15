@@ -180,3 +180,58 @@ export function openingDistances(p: Project, corners: Map<string, WallCorners>, 
   }
   return out;
 }
+
+/**
+ * Quanto bisogna percorrere da `at` lungo `dir` per uscire dallo spessore dei muri in cui `at` si trova
+ * (es. un punto agganciato all'asse di un muro o a un suo angolo). Serve a misurare un muro nuovo
+ * dalla faccia del muro a cui è agganciato, non dal suo asse.
+ * Ogni muro è trattato come rettangolo: asse da A a B, largo quanto lo spessore.
+ */
+export function faceOffset(p: Project, _corners: Map<string, WallCorners> | null, at: V, dir: V, excludeWall?: string): number {
+  const rects: { A: V; u: V; n: V; L: number; h: number }[] = [];
+  for (const w of Object.values(p.walls)) {
+    if (w.id === excludeWall) continue;
+    const A = p.nodes[w.a];
+    const B = p.nodes[w.b];
+    const L = Math.hypot(B.x - A.x, B.y - A.y);
+    if (L < 0.5) continue;
+    const u = norm(sub(B, A));
+    rects.push({ A, u, n: perp(u), L, h: w.thickness / 2 });
+  }
+  const EPS = 1e-6;
+  // uscita da una fascia lo <= f0 + f1·t <= hi
+  const slabExit = (f0: number, f1: number, lo: number, hi: number) => (f1 > 1e-9 ? (hi - f0) / f1 : f1 < -1e-9 ? (lo - f0) / f1 : Infinity);
+  let t = 0;
+  for (let iter = 0; iter < 8; iter++) {
+    const probe = add(at, mul(dir, t + 0.05));
+    let next = t;
+    for (const r of rects) {
+      const rel = sub(probe, r.A);
+      const a = rel.x * r.u.x + rel.y * r.u.y;
+      const b = rel.x * r.n.x + rel.y * r.n.y;
+      if (a < -EPS || a > r.L + EPS || Math.abs(b) >= r.h) continue;
+      const rel0 = sub(at, r.A);
+      const a0 = rel0.x * r.u.x + rel0.y * r.u.y;
+      const b0 = rel0.x * r.n.x + rel0.y * r.n.y;
+      const exit = Math.min(slabExit(a0, dir.x * r.u.x + dir.y * r.u.y, 0, r.L), slabExit(b0, dir.x * r.n.x + dir.y * r.n.y, -r.h, r.h));
+      if (exit > next) next = exit;
+    }
+    if (next <= t) break;
+    t = next;
+  }
+  // se si scorre dentro un muro per un lungo tratto non è un aggancio: nessuna correzione
+  return t > 100 ? 0 : t;
+}
+
+/** Lunghezza netta di un muro esistente: dalla faccia dei muri a cui è agganciato ai due estremi */
+export function wallClearLength(p: Project, corners: Map<string, WallCorners>, wallId: string) {
+  const w = p.walls[wallId];
+  const A = p.nodes[w.a];
+  const B = p.nodes[w.b];
+  const L = Math.hypot(B.x - A.x, B.y - A.y);
+  if (L < 0.5) return { L, net: L, offA: 0, offB: 0 };
+  const dir = norm(sub(B, A));
+  const offA = faceOffset(p, corners, A, dir, wallId);
+  const offB = faceOffset(p, corners, B, mul(dir, -1), wallId);
+  return { L, net: Math.max(0, L - offA - offB), offA, offB };
+}

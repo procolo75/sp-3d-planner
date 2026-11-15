@@ -6,6 +6,7 @@ import { dist } from '../model/geom';
 import { parseLength } from '../import/pdf';
 import { useStore } from '../model/store';
 import { fmtLen, wallRoomSides } from '../editor2d/Editor2D';
+import { wallClearLength } from '../editor2d/snapping';
 
 /** campo numerico che conferma su Invio/blur (accetta "3,62" in metri o "362" in cm se `length`) */
 function Num({ label, value, onChange, unit = 'cm', length, step = 1, tip }: { tip?: string; label: string; value: number; onChange: (v: number) => void; unit?: string; length?: boolean; step?: number }) {
@@ -125,7 +126,18 @@ export function Properties() {
             );
           })
         ) : (
-          <Num tip="Lunghezza del muro. Scrivi es. 4,15 e premi Invio." label="Lunghezza" value={L} length onChange={(v) => st.setWallLength(w.id, v)} />
+          (() => {
+            const c = wallClearLength(project, der.corners, w.id);
+            return (
+              <Num
+                tip="Lunghezza netta del muro, misurata dalla faccia dei muri a cui è agganciato. Scrivi es. 4,15 e premi Invio."
+                label="Lunghezza"
+                value={c.net}
+                length
+                onChange={(v) => st.setWallLength(w.id, Math.max(1, v + c.offA + c.offB))}
+              />
+            );
+          })()
         )}
         <Num label="Spessore" value={w.thickness} onChange={(v) => st.updateWall(w.id, { thickness: Math.max(2, v) })} />
         <Num label="Altezza" value={w.height} onChange={(v) => st.updateWall(w.id, { height: Math.max(10, v) })} />
