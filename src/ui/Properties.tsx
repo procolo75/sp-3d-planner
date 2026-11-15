@@ -88,6 +88,9 @@ export function Properties() {
             <li>
               <b>Abbattere un muro</b>: cliccalo e premi Canc. ⌘Z per tornare indietro.
             </li>
+            <li>
+              <b>💾 Salva su PC</b> (⌘S) salva il progetto in un file sul computer; <b>📂 Apri da PC</b> (⌘O) lo riapre.
+            </li>
           </ol>
         </div>
       </aside>

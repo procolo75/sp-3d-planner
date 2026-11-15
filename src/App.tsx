@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CatalogPanel } from './catalog/CatalogPanel';
 import { Editor2D } from './editor2d/Editor2D';
 import { listLibrary, loadSaved, startAutosave } from './model/persist';
+import { restoreFile } from './model/pcFiles';
 import { useStore } from './model/store';
 import { Scene3D } from './three/Scene3D';
 import { Properties } from './ui/Properties';
@@ -26,6 +27,7 @@ export default function App() {
     loadSaved().then(async (p) => {
       if (p) {
         useStore.getState().loadProject(p);
+        await restoreFile(p.id);
         // il lavoro ripreso coincide con la versione salvata in «I miei progetti»? altrimenti ci sono modifiche da salvare
         if (p.id) {
           const saved = (await listLibrary()).find((x) => x.id === p.id);

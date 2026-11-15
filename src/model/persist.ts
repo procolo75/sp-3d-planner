@@ -62,7 +62,7 @@ export function exportJSON(p: Project) {
   const blob = new Blob([JSON.stringify(p)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = (p.name || 'progetto').replace(/[^\w\- ]+/g, '_') + '.planner3d.json';
+  a.download = (p.name || 'progetto').replace(/[\\/:*?"<>|]+/g, '_') + '.sp3d.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

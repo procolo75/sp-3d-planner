@@ -1,5 +1,32 @@
 import { useEffect, useState } from 'react';
-import { ProjectsDialog, saveCurrent } from './ProjectsDialog';
+import { ProjectsDialog } from './ProjectsDialog';
+import { currentFile, openFromPC, saveToPC } from '../model/pcFiles';
+import { notify } from './Notice';
+
+async function savePC(askWhere: boolean) {
+  const r = await saveToPC(askWhere);
+  if (r.ok)
+    notify(
+      r.where === 'file'
+        ? `Salvato sul PC: «${r.fileName}» ✓`
+        : `Salvato nella cartella Download: «${r.fileName}». (Questo browser non permette di scegliere la cartella: con Chrome o Edge puoi farlo.)`,
+    );
+  else if (!r.cancelled) notify('Salvataggio non riuscito: ' + (r.error ?? 'errore sconosciuto'), true);
+}
+
+async function openPC() {
+  try {
+    const name = await openFromPC();
+    if (!name) return;
+    setTimeout(() => {
+      window.dispatchEvent(new Event('planner:fit'));
+      window.dispatchEvent(new CustomEvent('planner:fit3d'));
+    }, 80);
+    notify(`Aperto dal PC: «${name}»`);
+  } catch (e) {
+    notify('Non riesco ad aprire il file: ' + (e as Error).message, true);
+  }
+}
 import logoSp from '../assets/logo-sp.svg?raw';
 import logoVolto from '../assets/logo-volto.svg?raw';
 import { isDirty, redo, undo, useStore, type Tool } from '../model/store';
@@ -23,12 +50,20 @@ export function Toolbar() {
   const bg = useStore((s) => s.project.background);
   const wallThickness = useStore((s) => s.wallThickness);
   const [dialog, setDialog] = useState<'save' | 'list' | null>(null);
-  const dirty = useStore(isDirty);
+  // nome del file collegato (si aggiorna quando cambia lo stato di salvataggio)
+  useStore((st) => st.savedProject);
+  const fileName = currentFile();
+  // da salvare: modifiche nuove, oppure progetto mai salvato in un file sul PC
+  const dirty = useStore(isDirty) || !fileName;
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        saveCurrent(() => setDialog('save'));
+        savePC(e.shiftKey);
+      } else if (mod && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        openPC();
       }
     };
     window.addEventListener('keydown', k);
@@ -68,11 +103,24 @@ export function Toolbar() {
         <div className="spacer" />
         <div className="group">
           <span className="gtitle">File</span>
-          <button className={dirty ? 'primary' : ''} onClick={() => saveCurrent(() => setDialog('save'))} data-tip="Salva il progetto tra «I miei progetti» (⌘S). Il lavoro viene comunque tenuto in automatico finché non apri un altro progetto.">
-            💾 Salva{dirty ? ' •' : ''}
+          <button
+            className={dirty ? 'primary' : ''}
+            onClick={() => savePC(false)}
+            data-tip={
+              (fileName ? `Salva le modifiche nel file «${fileName}» sul tuo computer` : 'Salva il progetto in un file sul tuo computer: la prima volta scegli dove e con che nome') +
+              ' (⌘S). Il pallino • vuol dire che ci sono modifiche non salvate.'
+            }
+          >
+            💾 Salva su PC{dirty ? ' •' : ''}
           </button>
-          <button onClick={() => setDialog('list')} data-tip="Apri, scarica o elimina i progetti salvati">
-            📂 I miei progetti
+          <button onClick={() => savePC(true)} data-tip="Salva in un nuovo file (es. una variante del progetto), scegliendo cartella e nome (⇧⌘S)">
+            Salva con nome…
+          </button>
+          <button onClick={openPC} data-tip="Apri un progetto salvato sul tuo computer (file .sp3d.json) (⌘O)">
+            📂 Apri da PC
+          </button>
+          <button onClick={() => setDialog('list')} data-tip="I progetti usati di recente in questo browser: riaprili al volo, scaricali o eliminali">
+            🕘 Recenti
           </button>
           <button onClick={() => window.dispatchEvent(new Event('planner:wizard'))} data-tip="Inizia un nuovo progetto (da una pianta o da zero)">
             ✚ Nuovo

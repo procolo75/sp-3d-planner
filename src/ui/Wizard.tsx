@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { CLAUDE_PROMPT } from '../import/claudePrompt';
 import { MapError, parseMapText } from '../import/mapJson';
 import { useStore } from '../model/store';
+import { forgetFile } from '../model/pcFiles';
 
 type Step = 'choose' | 'claude';
 
@@ -39,6 +40,7 @@ export function Wizard({ onClose }: { onClose: () => void }) {
       const { project, stats } = parseMapText(src);
       const st = useStore.getState();
       st.loadProject(project);
+      forgetFile();
       st.setView('split');
       st.setTool('select');
       onClose();
@@ -61,6 +63,7 @@ export function Wizard({ onClose }: { onClose: () => void }) {
   const startEmpty = () => {
     const st = useStore.getState();
     st.newProject();
+    forgetFile();
     st.setTool('wall');
     onClose();
     import('./Notice').then(({ notify }) => notify('Progetto vuoto: disegna i muri cliccando sugli angoli. Mentre disegni puoi scrivere la lunghezza (es. 4,15) e premere Invio.'));
@@ -79,7 +82,7 @@ export function Wizard({ onClose }: { onClose: () => void }) {
 
         {step === 'choose' && (
           <div className="body">
-            {hasWork && <p className="warn">Attenzione: il progetto attuale verrà sostituito. Se vuoi tenerlo chiudi e usa prima «Esporta» (resta comunque in «Versioni precedenti»).</p>}
+            {hasWork && <p className="warn">Attenzione: il progetto attuale verrà sostituito. Se vuoi tenerlo chiudi e premi prima «💾 Salva su PC».</p>}
             <div className="choices">
               <button className="choice main" onClick={() => setStep('claude')}>
                 <span className="big">🤖</span>
