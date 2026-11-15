@@ -11,6 +11,7 @@ export function draft(p: Project): Project {
     openings: { ...p.openings },
     items: { ...p.items },
     labels: { ...p.labels },
+    cameras: { ...(p.cameras ?? {}) },
   };
 }
 

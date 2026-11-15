@@ -3,10 +3,11 @@ import { CATALOG_BY_ID, scaledParts } from '../catalog/catalog';
 import { derive, focusedRoom, useDerived, type Derived } from '../model/derived';
 import { add, dist, dot, mul, norm, perp, pointInPolygon, projectOnSegment, roomSides, sub, v, lineIntersect, type Room, type RoomSide, type V } from '../model/geom';
 import { offsetOnWall, redo, undo, useStore, type SnapPoint } from '../model/store';
-import type { Item, Opening, Project } from '../model/types';
+import type { Camera, Item, Opening, Project } from '../model/types';
+import { cameraCoverage, useCoverage } from '../model/coverage';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
-import { faceOffset, itemCorners, magnetToWall, openingDistances, wallDistances } from './snapping';
+import { faceOffset, itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistances } from './snapping';
 
 const st0 = () => useStore.getState();
 
@@ -25,7 +26,9 @@ type Drag =
   | { kind: 'wall'; id: string; start: V; base: Project; moved: boolean }
   | { kind: 'item'; id: string; off: V; moved: boolean }
   | { kind: 'rotate'; id: string }
-  | { kind: 'opening'; id: string };
+  | { kind: 'opening'; id: string }
+  | { kind: 'camera'; id: string; off: V; moved: boolean }
+  | { kind: 'aim'; id: string };
 
 const NODE_SNAP_PX = 12;
 const WALL_SNAP_PX = 10;
@@ -39,7 +42,9 @@ export function Editor2D() {
   const showDims = useStore((s) => s.showDims);
   const highlightRoom = useStore((s) => s.highlightRoom);
   const focus = useStore((s) => s.focus);
+  const showCoverage = useStore((s) => s.showCoverage);
   const der = useDerived(project);
+  const cov = useCoverage(project, der.corners);
   const focusKey = focusedRoom(der, focus)?.key ?? null;
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -221,7 +226,7 @@ export function Editor2D() {
 
   // --- hit test ----------------------------------------------------------------
   const hitTest = useCallback(
-    (p: V): { kind: 'node' | 'wall' | 'opening' | 'item' | 'room' | 'rotate'; id: string } | null => {
+    (p: V): { kind: 'node' | 'wall' | 'opening' | 'item' | 'room' | 'rotate' | 'camera' | 'aim'; id: string } | null => {
       const st = useStore.getState();
       const pr = st.project;
       const z = viewRef.current.zoom;
@@ -231,6 +236,10 @@ export function Editor2D() {
         const h = rotateHandlePos(pr.items[sel.id], z);
         if (dist(h, p) < 10 / z) return { kind: 'rotate', id: sel.id };
       }
+      // telecamere: maniglia della direzione, poi il simbolo
+      const cams = pr.cameras ?? {};
+      if (sel?.kind === 'camera' && cams[sel.id] && dist(aimHandlePos(cams[sel.id], z), p) < 10 / z) return { kind: 'aim', id: sel.id };
+      for (const c of Object.values(cams)) if (dist(c, p) < 11 / z) return { kind: 'camera', id: c.id };
       // nodi (solo vicino a un muro selezionato o con zoom alto)
       for (const n of Object.values(pr.nodes)) if (dist(n, p) < 7 / z) return { kind: 'node', id: n.id };
       // aperture (se più aperture si sovrappongono, ogni clic passa alla successiva)
@@ -308,6 +317,13 @@ export function Editor2D() {
       return;
     }
 
+    if (st.tool === 'camera') {
+      const m = e.shiftKey ? null : magnetCamera(st.project, p);
+      st.addCamera(m ?? { x: Math.round(p.x), y: Math.round(p.y) }, m?.rotation ?? 0);
+      st.setTool('select');
+      return;
+    }
+
     if (st.tool === 'detect') {
       setRoi({ a: p, b: p });
       return;
@@ -334,6 +350,17 @@ export function Editor2D() {
     if (hit?.kind === 'rotate') {
       st.beginDrag();
       dragRef.current = { kind: 'rotate', id: hit.id };
+      return;
+    }
+    if (hit?.kind === 'aim') {
+      st.beginDrag();
+      dragRef.current = { kind: 'aim', id: hit.id };
+      return;
+    }
+    if (hit?.kind === 'camera') {
+      st.select({ kind: 'camera', id: hit.id });
+      st.beginDrag();
+      dragRef.current = { kind: 'camera', id: hit.id, off: sub(p, st.project.cameras![hit.id]), moved: false };
       return;
     }
     if (hit?.kind === 'node') {
@@ -398,6 +425,25 @@ export function Editor2D() {
         d.moved = true;
         const m = e.shiftKey ? null : magnetToWall(st.project, { ...it, x: target.x, y: target.y }, derRef.current);
         st.updateItem(d.id, m ? { x: m.x, y: m.y, rotation: m.rotation } : { x: Math.round(target.x), y: Math.round(target.y) });
+      } else if (d.kind === 'camera') {
+        const c = st.project.cameras?.[d.id];
+        if (!c) return;
+        const target = sub(p, d.off);
+        d.moved = true;
+        const m = e.shiftKey ? null : magnetCamera(st.project, target);
+        if (!m) st.updateCamera(d.id, { x: Math.round(target.x), y: Math.round(target.y) });
+        else {
+          // se ora guarderebbe dentro il muro, si gira verso la stanza; altrimenti tiene la sua direzione
+          const nat = { x: Math.cos(m.rotation), y: Math.sin(m.rotation) };
+          const into = Math.cos(c.rotation) * nat.x + Math.sin(c.rotation) * nat.y < 0.05;
+          st.updateCamera(d.id, { x: m.x, y: m.y, ...(into ? { rotation: m.rotation } : {}) });
+        }
+      } else if (d.kind === 'aim') {
+        const c = st.project.cameras?.[d.id];
+        if (!c) return;
+        let a = Math.atan2(p.y - c.y, p.x - c.x);
+        if (!e.shiftKey) a = Math.round(a / (Math.PI / 36)) * (Math.PI / 36);
+        st.updateCamera(d.id, { rotation: a });
       } else if (d.kind === 'rotate') {
         const it = st.project.items[d.id];
         let a = Math.atan2(p.y - it.y, p.x - it.x) + Math.PI / 2;
@@ -521,6 +567,11 @@ export function Editor2D() {
         st.duplicateItem(st.selection.id);
         return;
       }
+      if (mod && e.key.toLowerCase() === 'd' && st.selection?.kind === 'camera') {
+        e.preventDefault();
+        st.duplicateCamera(st.selection.id);
+        return;
+      }
       if (e.key === ' ') {
         setSpaceDown(true);
         return;
@@ -562,6 +613,11 @@ export function Editor2D() {
         st.deleteSelection();
         return;
       }
+      if (e.key.toLowerCase() === 'r' && st.selection?.kind === 'camera') {
+        const c = st.project.cameras?.[st.selection.id];
+        if (c) st.updateCamera(c.id, { rotation: c.rotation + (e.shiftKey ? -1 : 1) * (Math.PI / 12) });
+        return;
+      }
       if (e.key.toLowerCase() === 'r' && st.selection?.kind === 'item') {
         const it = st.project.items[st.selection.id];
         st.updateItem(it.id, { rotation: it.rotation + (e.shiftKey ? Math.PI / 12 : Math.PI / 2) });
@@ -573,6 +629,7 @@ export function Editor2D() {
         if (k === 'w') st.setTool('wall');
         if (k === 'p') st.setTool('door');
         if (k === 'f') st.setTool('window');
+        if (k === 't') st.setTool('camera');
       }
     };
     const up = (e: KeyboardEvent) => {
@@ -619,6 +676,13 @@ export function Editor2D() {
     return m ? { ...tmp, ...m } : tmp;
   }, [tool, placeCatalogId, rawHover, project, der]);
 
+  const cameraGhost = useMemo(() => {
+    if (tool !== 'camera' || !rawHover) return null;
+    const m = magnetCamera(project, rawHover);
+    const c: Camera = { id: '_', x: m?.x ?? rawHover.x, y: m?.y ?? rawHover.y, z: 230, rotation: m?.rotation ?? 0, fov: 90, range: 800, color: '#2f7de1' };
+    return { c, poly: cameraCoverage(c, cov.segs) };
+  }, [tool, rawHover, project, cov.segs]);
+
   const cursor = spaceDown || dragRef.current?.kind === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair';
 
   return (
@@ -640,6 +704,20 @@ export function Editor2D() {
           .map((it) => (
             <ItemSymbol key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} z={z} />
           ))}
+
+        {/* zone viste dalle telecamere (sotto i muri) */}
+        {showCoverage &&
+          Object.values(project.cameras ?? {}).map((c) => {
+            const poly = cov.polys.get(c.id);
+            if (!poly || poly.length < 3) return null;
+            const sel = selection?.kind === 'camera' && selection.id === c.id;
+            return (
+              <polygon key={'cov' + c.id} points={poly.map((q) => `${q.x},${q.y}`).join(' ')} fill={c.color} fillOpacity={sel ? 0.32 : 0.2} stroke={c.color} strokeOpacity={sel ? 0.9 : 0.5} strokeWidth={sel ? 1.5 : 1} vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }} />
+            );
+          })}
+        {cameraGhost && (
+          <polygon points={cameraGhost.poly.map((q) => `${q.x},${q.y}`).join(' ')} fill="#2f7de1" fillOpacity={0.15} stroke="#2f7de1" strokeDasharray="4 3" strokeWidth={1} vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />
+        )}
 
         {/* muri */}
         {Object.values(project.walls).map((w) => {
@@ -743,6 +821,12 @@ export function Editor2D() {
           return null;
         })()}
 
+        {/* telecamere */}
+        {Object.values(project.cameras ?? {}).map((c) => (
+          <CameraSymbol key={c.id} c={c} z={z} selected={selection?.kind === 'camera' && selection.id === c.id} />
+        ))}
+        {cameraGhost && <CameraSymbol c={cameraGhost.c} z={z} selected={false} ghost />}
+
         {roi && (
           <rect x={Math.min(roi.a.x, roi.b.x)} y={Math.min(roi.a.y, roi.b.y)} width={Math.abs(roi.a.x - roi.b.x)} height={Math.abs(roi.a.y - roi.b.y)} fill="#2f7de1" fillOpacity={0.08} stroke="#2f7de1" strokeDasharray="6 4" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
         )}
@@ -764,6 +848,7 @@ export function Editor2D() {
         {(tool === 'door' || tool === 'window' || tool === 'arch') && 'Clicca su un muro per inserire'}
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
         {tool === 'place' && 'Clicca per posizionare il mobile (si aggancia ai muri; Shift = libero)'}
+        {tool === 'camera' && 'Clicca dove montare la telecamera: si aggancia a pareti e angoli e guarda verso la stanza (Shift = libera). Poi trascina il pallino per cambiare direzione'}
         {tool === 'select' && 'Clic per selezionare · trascina muri, nodi, mobili · Canc per eliminare/abbattere · R ruota · ⌘D duplica · spazio+trascina per spostare la vista'}
         {tool === 'calibrate' && calib.length < 2 && 'Correggi scala: clicca i due estremi di una misura che conosci (es. un muro o una quota): tutta la pianta verrà riscalata'}
         {tool === 'detect' && 'Trascina un rettangolo attorno all\'appartamento (escludi scale e parti comuni): i muri verranno ricostruiti'}
@@ -852,6 +937,39 @@ function rotateHandlePos(it: Item, z: number): V {
   const r = it.d / 2 + 22 / z;
   // dietro (lato -y locale)
   return { x: it.x + s * r, y: it.y - c * r };
+}
+
+/** maniglia per orientare la telecamera: davanti all'obiettivo, a distanza fissa sullo schermo */
+function aimHandlePos(c: Camera, z: number): V {
+  const r = 46 / z;
+  return { x: c.x + Math.cos(c.rotation) * r, y: c.y + Math.sin(c.rotation) * r };
+}
+
+function CameraSymbol({ c, z, selected, ghost }: { c: Camera; z: number; selected: boolean; ghost?: boolean }) {
+  const deg = (c.rotation * 180) / Math.PI;
+  const k = 1 / z;
+  const h = aimHandlePos(c, z);
+  return (
+    <g style={{ pointerEvents: 'none' }} opacity={ghost ? 0.75 : 1}>
+      {selected && (
+        <>
+          <line x1={c.x} y1={c.y} x2={h.x} y2={h.y} stroke={c.color} strokeWidth={1.5} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" />
+          <circle cx={h.x} cy={h.y} r={6 * k} fill="#fff" stroke={c.color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        </>
+      )}
+      <g transform={`translate(${c.x} ${c.y}) rotate(${deg}) scale(${k})`}>
+        {/* corpo e obiettivo */}
+        <rect x={-9} y={-6} width={14} height={12} rx={2.5} fill={c.color} stroke={selected ? '#1b5fb8' : '#fff'} strokeWidth={selected ? 2.5 : 1.5} />
+        <path d="M 5 -4 L 12 -7 L 12 7 L 5 4 Z" fill={c.color} stroke={selected ? '#1b5fb8' : '#fff'} strokeWidth={selected ? 2.5 : 1.5} strokeLinejoin="round" />
+        <circle cx={-3} cy={0} r={2.2} fill="#fff" />
+      </g>
+      {!ghost && c.label && z > 0.35 && (
+        <text x={c.x} y={c.y + 20 * k} fontSize={10 * k} textAnchor="middle" fontWeight={700} fill={c.color} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 * k }}>
+          {c.label}
+        </text>
+      )}
+    </g>
+  );
 }
 
 function Grid({ view, size }: { view: View; size: { w: number; h: number } }) {

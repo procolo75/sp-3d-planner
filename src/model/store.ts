@@ -6,10 +6,11 @@ import type { DetectedDoor, DetectedWall } from '../import/detectWalls';
 import { projectOnSegment } from './geom';
 import * as ops from './ops';
 import { allowEmptySave } from './saveGuard';
-import { emptyProject, uid, type Background, type ID, type Item, type Opening, type OpeningType, type Project, type RoomLabel, type Wall } from './types';
+import { CAMERA_COLORS, CAMERA_DEFAULTS } from './coverage';
+import { emptyProject, uid, type Background, type Camera, type ID, type Item, type Opening, type OpeningType, type Project, type RoomLabel, type Wall } from './types';
 
-export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'calibrate' | 'place' | 'detect';
-export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node'; id: string } | null;
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'calibrate' | 'place' | 'detect' | 'camera';
+export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node' | 'camera'; id: string } | null;
 
 /** Punto risolto dallo snapping: nodo esistente, punto su un muro, o libero */
 export type SnapPoint = { x: number; y: number; nodeId?: ID; wallId?: ID };
@@ -23,6 +24,8 @@ interface State {
   wallHeight: number;
   view: '2d' | '3d' | 'split';
   showDims: boolean;
+  /** mostra le zone viste dalle telecamere */
+  showCoverage: boolean;
   /** stanza evidenziata (passando sopra al suo nome nell'elenco) */
   highlightRoom: string | null;
   /** «Arreda questa stanza»: punto (cm) dentro la stanza su cui concentrarsi; null = tutta la casa */
@@ -62,6 +65,11 @@ interface State {
   updateItem(id: ID, patch: Partial<Item>): void;
   deleteItem(id: ID): void;
   duplicateItem(id: ID): ID | null;
+
+  addCamera(at: V, rotation: number): ID;
+  updateCamera(id: ID, patch: Partial<Camera>): void;
+  deleteCamera(id: ID): void;
+  duplicateCamera(id: ID): ID | null;
 
   setLabel(at: V, name: string, existingId?: ID, floorColor?: string): void;
   deleteLabel(id: ID): void;
@@ -112,6 +120,7 @@ export const useStore = create<State>()(
         wallHeight: 280,
         view: 'split',
         showDims: true,
+        showCoverage: true,
         highlightRoom: null,
         focus: null,
 
@@ -219,6 +228,35 @@ export const useStore = create<State>()(
           return nid;
         },
 
+        addCamera: (at, rotation) => {
+          const id = uid();
+          mutate((p) => {
+            const used = new Set(Object.values(p.cameras!).map((c) => c.color));
+            const n = Object.keys(p.cameras!).length;
+            const color = CAMERA_COLORS.find((c) => !used.has(c)) ?? CAMERA_COLORS[n % CAMERA_COLORS.length];
+            p.cameras![id] = { id, x: at.x, y: at.y, rotation, ...CAMERA_DEFAULTS, color, label: `Telecamera ${n + 1}` };
+          });
+          set({ selection: { kind: 'camera', id } });
+          return id;
+        },
+        updateCamera: (id, patch) => mutate((p) => p.cameras![id] && (p.cameras![id] = { ...p.cameras![id], ...patch })),
+        deleteCamera: (id) => {
+          mutate((p) => delete p.cameras![id]);
+          set({ selection: null });
+        },
+        duplicateCamera: (id) => {
+          const c = get().project.cameras?.[id];
+          if (!c) return null;
+          const nid = uid();
+          mutate((p) => {
+            const used = new Set(Object.values(p.cameras!).map((x) => x.color));
+            const color = CAMERA_COLORS.find((x) => !used.has(x)) ?? c.color;
+            p.cameras![nid] = { ...c, id: nid, x: c.x + 40, y: c.y + 40, color, label: c.label ? c.label + ' (copia)' : undefined };
+          });
+          set({ selection: { kind: 'camera', id: nid } });
+          return nid;
+        },
+
         setLabel: (at, name, existingId, floorColor) =>
           mutate((p) => {
             const id = existingId ?? uid();
@@ -266,6 +304,7 @@ export const useStore = create<State>()(
             for (const op of Object.values(p.openings)) p.openings[op.id] = { ...op, offset: op.offset * k, width: Math.round(op.width * k) };
             for (const it of Object.values(p.items)) p.items[it.id] = { ...it, ...sc(it) };
             for (const l of Object.values(p.labels)) p.labels[l.id] = { ...l, ...sc(l) };
+            for (const c of Object.values(p.cameras!)) p.cameras![c.id] = { ...c, ...sc(c), range: c.range * k };
             if (p.background) {
               const b = p.background;
               p.background = { ...b, cmPerPx: b.cmPerPx * k, ...sc({ x: b.x, y: b.y }) };
@@ -278,6 +317,7 @@ export const useStore = create<State>()(
           if (s.kind === 'wall') get().deleteWall(s.id);
           else if (s.kind === 'opening') get().deleteOpening(s.id);
           else if (s.kind === 'item') get().deleteItem(s.id);
+          else if (s.kind === 'camera') get().deleteCamera(s.id);
         },
       };
     },
@@ -306,5 +346,5 @@ export function isDirty(s: { project: Project; savedProject: Project | null }) {
   const p = s.project;
   const q = s.savedProject;
   if (!p.id || !q) return true;
-  return p.nodes !== q.nodes || p.walls !== q.walls || p.openings !== q.openings || p.items !== q.items || p.labels !== q.labels || p.background !== q.background || p.name !== q.name;
+  return p.nodes !== q.nodes || p.walls !== q.walls || p.openings !== q.openings || p.items !== q.items || p.labels !== q.labels || p.cameras !== q.cameras || p.background !== q.background || p.name !== q.name;
 }

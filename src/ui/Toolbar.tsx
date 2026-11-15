@@ -38,6 +38,7 @@ const TOOLS: { t: Tool; label: string; icon: string; tip: string }[] = [
   { t: 'window', label: 'Finestra', icon: '🪟', tip: 'Clic su un muro per mettere una finestra. (tasto F)' },
   { t: 'arch', label: 'Varco', icon: '⌒', tip: 'Clic su un muro per aprire un passaggio senza porta.' },
   { t: 'sliding', label: 'Scorrevole', icon: '⇆', tip: 'Ante scorrevoli (es. IKEA SKYTTA): clic su un muro. Sostituiscono una porta o un tratto di muro (fronte della cabina armadio). Larghezza e altezza SKYTTA si scelgono a destra.' },
+  { t: 'camera', label: 'Telecamera', icon: '📹', tip: 'Metti una telecamera: clic sul punto dove la monti (si aggancia a pareti e angoli). Trascina il pallino davanti per girarla; angolo di visione e portata si scelgono a destra. Vedi le zone coperte e quanto della casa è sorvegliato. (tasto T)' },
 ];
 
 export function Toolbar() {
@@ -47,6 +48,8 @@ export function Toolbar() {
   const setView = useStore((s) => s.setView);
   const name = useStore((s) => s.project.name);
   const showDims = useStore((s) => s.showDims);
+  const showCoverage = useStore((s) => s.showCoverage);
+  const nCameras = useStore((s) => Object.keys(s.project.cameras ?? {}).length);
   const bg = useStore((s) => s.project.background);
   const wallThickness = useStore((s) => s.wallThickness);
   const [dialog, setDialog] = useState<'save' | 'list' | null>(null);
@@ -159,6 +162,9 @@ export function Toolbar() {
           <span className="gtitle">Vista</span>
           <button className={showDims ? 'on' : ''} onClick={() => useStore.getState().set('showDims', !showDims)} data-tip="Mostra o nascondi le misure interne delle stanze">
             📐 Quote
+          </button>
+          <button className={showCoverage ? 'on' : ''} onClick={() => useStore.getState().set('showCoverage', !showCoverage)} data-tip={nCameras ? 'Mostra o nascondi le zone viste dalle telecamere (in pianta e in 3D)' : 'Mostra o nascondi le zone viste dalle telecamere. Aggiungi una telecamera con lo strumento 📹 Telecamera'}>
+            📹 Copertura
           </button>
           {(['2d', 'split', '3d'] as const).map((v) => (
             <button

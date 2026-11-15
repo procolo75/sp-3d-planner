@@ -7,7 +7,8 @@ import { derive, focusedRoom, useDerived } from '../model/derived';
 import { add, labelPoint, mul, norm, perp, pointInPolygon, sub } from '../model/geom';
 import { degree } from '../model/ops';
 import { useStore } from '../model/store';
-import type { Item, Opening, Project } from '../model/types';
+import type { Camera, Item, Opening, Project } from '../model/types';
+import { useCoverage } from '../model/coverage';
 import { magnetToWall } from '../editor2d/snapping';
 import { buildFloorGeometry, buildWallGeometry, S } from './wallGeometry';
 
@@ -301,6 +302,16 @@ function World({ cutaway, interactive }: { cutaway: boolean; interactive: boolea
   const selection = useStore((s) => s.selection);
   const focus = useStore((s) => s.focus);
   const fr = focusedRoom(der, focus);
+  const showCoverage = useStore((s) => s.showCoverage);
+  const cov = useCoverage(project, der.corners);
+  const covGeos = useMemo(() => {
+    if (!showCoverage) return [];
+    return Object.values(project.cameras ?? {}).flatMap((c) => {
+      const poly = cov.polys.get(c.id);
+      return poly && poly.length >= 3 ? [{ id: c.id, color: c.color, geo: buildFloorGeometry(poly, 0.015) }] : [];
+    });
+  }, [showCoverage, cov, project.cameras]);
+  useEffect(() => () => covGeos.forEach((g) => g.geo.dispose()), [covGeos]);
   // «arreda questa stanza»: solo i muri che la delimitano
   const focusWalls = useMemo(() => {
     if (!fr) return null;
@@ -398,6 +409,16 @@ function World({ cutaway, interactive }: { cutaway: boolean; interactive: boolea
         .map((it) => (
         <Item3D key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} interactive={interactive} />
       ))}
+      {covGeos.map((g, i) => (
+        <mesh key={'cov' + g.id} geometry={g.geo} renderOrder={2 + i}>
+          <meshBasicMaterial color={g.color} transparent opacity={selection?.kind === 'camera' && selection.id === g.id ? 0.4 : 0.25} side={THREE.DoubleSide} depthWrite={false} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
+        </mesh>
+      ))}
+      {Object.values(project.cameras ?? {})
+        .filter((c) => !fr || pointInPolygon(c, fr.poly))
+        .map((c) => (
+          <Camera3D key={c.id} c={c} selected={selection?.kind === 'camera' && selection.id === c.id} interactive={interactive} />
+        ))}
     </group>
   );
 }
@@ -492,6 +513,38 @@ function Opening3D({ p, o, cutaway, isSel }: { p: Project; o: Opening; cutaway: 
     );
   }
   return null;
+}
+
+/** telecamera: staffa, corpo e obiettivo rivolto nella direzione di ripresa (+x locale) */
+function Camera3D({ c, selected, interactive }: { c: Camera; selected: boolean; interactive: boolean }) {
+  const body = selected ? '#7fb2f0' : '#f5f5f5';
+  return (
+    <group
+      position={[c.x * S, c.z * S, c.y * S]}
+      rotation-y={-c.rotation}
+      onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'camera', id: c.id })) : undefined}
+    >
+      {/* staffa verso il muro */}
+      <mesh position={[-0.05, 0, 0]}>
+        <boxGeometry args={[0.06, 0.02, 0.02]} />
+        <meshStandardMaterial color="#9aa0a6" />
+      </mesh>
+      <group rotation-z={-0.35}>
+        <mesh castShadow>
+          <boxGeometry args={[0.14, 0.07, 0.08]} />
+          <meshStandardMaterial color={body} roughness={0.5} />
+        </mesh>
+        <mesh position={[0.072, 0, 0]} rotation-z={Math.PI / 2}>
+          <cylinderGeometry args={[0.025, 0.025, 0.012, 20]} />
+          <meshStandardMaterial color="#1f2937" metalness={0.3} roughness={0.2} />
+        </mesh>
+        <mesh position={[0, 0.038, 0]}>
+          <boxGeometry args={[0.15, 0.006, 0.09]} />
+          <meshStandardMaterial color={c.color} />
+        </mesh>
+      </group>
+    </group>
+  );
 }
 
 /** materiale delle ante scorrevoli secondo la finitura scelta */

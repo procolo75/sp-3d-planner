@@ -11,6 +11,7 @@ import { Tooltip } from './ui/Tooltip';
 import { Notice } from './ui/Notice';
 import { Wizard } from './ui/Wizard';
 import { FocusBar } from './ui/FocusBar';
+import { Side } from './ui/Side';
 import './App.css';
 
 export default function App() {
@@ -47,13 +48,17 @@ export default function App() {
     <div className="app">
       <Toolbar />
       <div className="main">
-        <CatalogPanel />
+        <Side side="left" label="Mobili">
+          <CatalogPanel />
+        </Side>
         <div className={'views ' + view}>
           <FocusBar />
           {view !== '3d' && <Editor2D />}
           {view !== '2d' && <Scene3D />}
         </div>
-        <Properties />
+        <Side side="right" label="Proprietà">
+          <Properties />
+        </Side>
       </div>
       <Tooltip />
       <Notice />

@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { CAMERA_COLORS, coverageStats, useCoverage, type CoverageStats } from '../model/coverage';
+import type { Room } from '../model/geom';
 import { listBackups, type Backup } from '../model/persist';
 import { CATALOG_BY_ID } from '../catalog/catalog';
 import { focusedRoom, focusOnRoom, useDerived } from '../model/derived';
@@ -37,6 +39,8 @@ export function Properties() {
   const focus = useStore((s) => s.focus);
   const focusRoomKey = focusedRoom(der, focus)?.key ?? null;
   const st = useStore.getState();
+  const cov = useCoverage(project, der.corners);
+  const stats = useMemo(() => (cov.polys.size ? coverageStats(der.rooms, cov.polys) : null), [cov, der.rooms]);
 
   if (!sel) {
     const area = der.rooms.reduce((a, r) => a + r.area, 0) / 10000;
@@ -73,6 +77,7 @@ export function Properties() {
               })}
           </div>
         )}
+        {stats && <CameraSummary stats={stats} rooms={der.rooms} roomName={(k) => der.roomLabel.get(k)?.name} />}
         <Backups />
         <div className="help">
           <h4>Come si usa</h4>
@@ -295,6 +300,56 @@ export function Properties() {
     );
   }
 
+  if (sel.kind === 'camera') {
+    const c = project.cameras?.[sel.id];
+    if (!c) return null;
+    const dirDeg = Math.round(((((c.rotation * 180) / Math.PI) % 360) + 360) % 360);
+    const seen = stats?.perCamera.get(c.id) ?? 0;
+    return (
+      <aside className="props">
+        <h3>📹 {c.label || 'Telecamera'}</h3>
+        <RoomName value={c.label ?? ''} placeholder="es. Ingresso" onChange={(label) => st.updateCamera(c.id, { label: label || undefined })} />
+        <p className="muted small" style={{ margin: 0 }}>
+          Vede circa <b>{seen.toFixed(1).replace('.', ',')} m²</b> della casa
+        </p>
+        <Num tip="Angolo di visione orizzontale dell'obiettivo (lo trovi nella scheda della telecamera, es. 110°)" label="Angolo visione" unit="°" value={c.fov} onChange={(v) => st.updateCamera(c.id, { fov: Math.max(5, Math.min(360, v)) })} />
+        <div className="row presets">
+          {[60, 90, 110, 130, 180, 360].map((f) => (
+            <button key={f} className={Math.round(c.fov) === f ? 'on' : ''} onClick={() => st.updateCamera(c.id, { fov: f })} data-tip={f === 360 ? 'Fisheye a 360° (montata al soffitto)' : `Angolo di ${f}°`}>
+              {f}°
+            </button>
+          ))}
+        </div>
+        <Num tip="Fin dove la telecamera vede abbastanza bene da riconoscere qualcosa (es. 8 m). Scrivi in metri, es. 6,5" label="Portata" value={c.range} length onChange={(v) => st.updateCamera(c.id, { range: Math.max(50, v) })} />
+        <div className="row presets">
+          {[400, 600, 800, 1200].map((r) => (
+            <button key={r} className={Math.round(c.range) === r ? 'on' : ''} onClick={() => st.updateCamera(c.id, { range: r })}>
+              {r / 100} m
+            </button>
+          ))}
+        </div>
+        <Num tip="Direzione in cui guarda, in gradi (0° = verso destra della pianta, 90° = verso il basso). Più comodo: trascina il pallino davanti alla telecamera, o premi R" label="Direzione" unit="°" value={dirDeg} onChange={(v) => st.updateCamera(c.id, { rotation: (v * Math.PI) / 180 })} />
+        <Num tip="Altezza a cui è montata (serve per il 3D)" label="Altezza" value={c.z} onChange={(v) => st.updateCamera(c.id, { z: Math.max(0, v) })} />
+        <div className="swatches">
+          {CAMERA_COLORS.map((col) => (
+            <button key={col} style={{ background: col }} className={c.color === col ? 'on' : ''} onClick={() => st.updateCamera(c.id, { color: col })} data-tip="Colore della zona coperta" />
+          ))}
+        </div>
+        <div className="row">
+          <button onClick={() => st.updateCamera(c.id, { rotation: c.rotation + Math.PI / 12 })} data-tip="Gira di 15° (tasto R; Shift+R nell'altro verso)">⟳ 15°</button>
+          <button onClick={() => st.duplicateCamera(c.id)} data-tip="Crea una copia accanto (⌘D)">Duplica</button>
+        </div>
+        <p className="muted small">
+          La vista è fermata da muri, finestre e mobili alti (armadi, frigo…). Porte e varchi sono considerati aperti.
+          {!useStore.getState().showCoverage && ' La copertura è nascosta: attivala con 📹 Copertura in alto.'}
+        </p>
+        <button className="danger" onClick={() => st.deleteCamera(c.id)}>
+          Elimina
+        </button>
+      </aside>
+    );
+  }
+
   if (sel.kind === 'node') {
     const n = project.nodes[sel.id];
     if (!n) return null;
@@ -307,6 +362,50 @@ export function Properties() {
     );
   }
   return null;
+}
+
+/** riepilogo: quanto della casa (e di ogni stanza) è visto dalle telecamere */
+function CameraSummary({ stats, rooms, roomName }: { stats: CoverageStats; rooms: Room[]; roomName: (key: string) => string | undefined }) {
+  const cams = Object.values(useStore((s) => s.project.cameras) ?? {});
+  const st = useStore.getState();
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return (
+    <div className="rooms cams">
+      <h4>Telecamere</h4>
+      <p style={{ margin: '0 0 4px' }}>
+        Casa coperta: <b>{pct(stats.total)}</b>
+      </p>
+      {cams.map((c) => (
+        <div key={c.id} className="roomrow">
+          <span className="dot" style={{ background: c.color }} />
+          <button className="link" onClick={() => st.select({ kind: 'camera', id: c.id })} data-tip="Seleziona la telecamera">
+            {c.label || 'Telecamera'}
+          </button>
+          <span className="muted small">{(stats.perCamera.get(c.id) ?? 0).toFixed(1).replace('.', ',')} m²</span>
+        </div>
+      ))}
+      <span className="muted small">Per stanza</span>
+      {rooms
+        .slice()
+        .sort((a, b) => b.area - a.area)
+        .map((r) => {
+          const v = stats.perRoom.get(r.key) ?? 0;
+          return (
+            <div key={r.key} className="roomrow" onMouseEnter={() => st.set('highlightRoom', r.key)} onMouseLeave={() => st.set('highlightRoom', null)}>
+              <span style={{ flex: 1 }} className="small">
+                {roomName(r.key) || 'senza nome'}
+              </span>
+              <span className="covbar">
+                <span style={{ width: pct(v) }} />
+              </span>
+              <span className="small" style={{ width: 34, textAlign: 'right', color: v < 0.05 ? '#b5332e' : undefined }}>
+                {pct(v)}
+              </span>
+            </div>
+          );
+        })}
+    </div>
+  );
 }
 
 function RoomName({ value, onChange, placeholder = 'es. Cucina', autoFocus, compact }: { value: string; onChange: (s: string) => void; placeholder?: string; autoFocus?: boolean; compact?: boolean }) {

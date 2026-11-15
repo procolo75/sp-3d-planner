@@ -26,6 +26,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 - [8. La vista 3D](#8-la-vista-3d)
 - [9. La passeggiata](#9-la-passeggiata)
 - [10. Salvare e aprire i progetti](#10-salvare-e-aprire-i-progetti)
+- [11. Telecamere e copertura](#11-telecamere-e-copertura)
 - [Scorciatoie da tastiera](#scorciatoie-da-tastiera)
 - [Domande frequenti](#domande-frequenti)
 - [Privacy](#privacy)
@@ -43,6 +44,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 - **Mobili**: mobili generici e oltre **150 articoli IKEA** comuni (PAX, KALLAX, BILLY, MALM, KIVIK, METOD, GODMORGON…), piatti doccia e vasche in tutte le misure comuni, più il **mobile su misura** per qualsiasi altra cosa. Si appoggiano da soli ai muri e mostrano la distanza dalle pareti.
 - **Una stanza alla volta**: pianta e 3D mostrano solo la stanza che stai arredando, da vicino.
 - **3D**: vista d'insieme, vista dall'alto, muri bassi, ombre e **passeggiata** in prima persona.
+- **Telecamere**: metti le telecamere di sorveglianza, scegli angolo di visione e portata e vedi **le zone coperte** e quanta parte di ogni stanza è sorvegliata.
 - **Salvataggio su PC** in un file, apertura da PC, progetti recenti e versioni precedenti automatiche.
 
 ## Primi passi
@@ -205,17 +207,28 @@ Pulsanti in alto a destra della vista 3D:
 
 **Su un altro computer o browser**: salva su PC, porta il file (chiavetta, cloud, email…) e sull'altro computer apri il sito e usa **📂 Apri da PC**.
 
+## 11. Telecamere e copertura
+
+1. Premi **📹 Telecamera** (tasto **T**) e clicca dove la monti: si aggancia alla parete o all'**angolo** e guarda verso la stanza (**Shift** = posizione libera).
+2. In pianta compare in colore la **zona che vede**; la stessa zona appare sul pavimento in 3D.
+3. Per girarla trascina il **pallino** davanti alla telecamera (o premi **R** / **Shift+R** per 15°). Trascinando la telecamera la sposti lungo le pareti.
+4. A destra scegli **angolo di visione** (60°–180°, o 360° per le fisheye da soffitto), **portata** in metri, altezza, colore e nome.
+5. Senza nulla selezionato, il pannello a destra mostra **quanta parte della casa è coperta** e la percentuale **stanza per stanza**: le stanze scoperte sono in rosso.
+6. Il pulsante **📹 Copertura** (in alto, gruppo *Vista*) mostra o nasconde le zone coperte.
+
+La vista è fermata da muri, finestre, ante scorrevoli non trasparenti e mobili alti (dai 170 cm in su: armadi, frigo, librerie). Porte e varchi sono considerati **aperti**. La copertura è in pianta (2D): non tiene conto dell'inclinazione verso il basso della telecamera.
+
 ## Scorciatoie da tastiera
 
 | Tasti | Azione |
 |---|---|
 | **⌘S** / **⇧⌘S** / **⌘O** | Salva su PC / Salva con nome / Apri da PC |
 | **⌘Z** / **⇧⌘Z** (o **⌘Y**) | Annulla / Ripeti |
-| **V** / **W** / **P** / **F** | Seleziona / Muro / Porta / Finestra |
+| **V** / **W** / **P** / **F** / **T** | Seleziona / Muro / Porta / Finestra / Telecamera |
 | **Esc** | termina il muro, torna a *Seleziona*, deseleziona |
 | **Canc** o **⌫** | elimina la selezione (abbatte il muro) |
-| **R** / **Shift+R** | ruota il mobile di 90° / 15° |
-| **⌘D** | duplica il mobile |
+| **R** / **Shift+R** | ruota il mobile di 90° / 15°; la telecamera di 15° in un verso o nell'altro |
+| **⌘D** | duplica il mobile o la telecamera |
 | **Shift** (tenuto) | disegna/sposta senza agganci |
 | **spazio** + trascina | sposta la vista della pianta |
 | numeri + **Invio** | lunghezza esatta mentre disegni un muro |

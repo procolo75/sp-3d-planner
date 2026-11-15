@@ -73,6 +73,7 @@ export async function importJSON(file: File): Promise<Project> {
   p.openings ??= {};
   p.items ??= {};
   p.labels ??= {};
+  p.cameras ??= {};
   return p;
 }
 

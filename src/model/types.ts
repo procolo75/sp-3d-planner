@@ -64,6 +64,23 @@ export interface RoomLabel {
   floorColor?: string;
 }
 
+/** Telecamera di sorveglianza: punto in pianta, direzione e angolo di visione */
+export interface Camera {
+  id: ID;
+  x: number;
+  y: number;
+  /** quota di montaggio (cm da terra) */
+  z: number;
+  /** direzione in cui guarda, in pianta (radianti, 0 = verso destra) */
+  rotation: number;
+  /** angolo di visione orizzontale (gradi, 360 = fisheye) */
+  fov: number;
+  /** distanza massima utile (cm) */
+  range: number;
+  color: string;
+  label?: string;
+}
+
 export interface Background {
   dataUrl: string;
   widthPx: number;
@@ -88,6 +105,8 @@ export interface Project {
   openings: Record<ID, Opening>;
   items: Record<ID, Item>;
   labels: Record<ID, RoomLabel>;
+  /** assente nei progetti salvati prima delle telecamere */
+  cameras?: Record<ID, Camera>;
   background?: Background;
 }
 
@@ -99,6 +118,7 @@ export const emptyProject = (): Project => ({
   openings: {},
   items: {},
   labels: {},
+  cameras: {},
 });
 
 export const uid = () => Math.random().toString(36).slice(2, 10);

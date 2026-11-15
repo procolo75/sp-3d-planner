@@ -1,4 +1,4 @@
-import { add, mul, norm, perp, projectOnSegment, sub, type V, type WallCorners } from '../model/geom';
+import { add, lineIntersect, mul, norm, perp, projectOnSegment, sub, type V, type WallCorners } from '../model/geom';
 import type { Derived } from '../model/derived';
 import type { Item, Opening, Project } from '../model/types';
 
@@ -234,4 +234,41 @@ export function wallClearLength(p: Project, corners: Map<string, WallCorners>, w
   const offA = faceOffset(p, corners, A, dir, wallId);
   const offB = faceOffset(p, corners, B, mul(dir, -1), wallId);
   return { L, net: Math.max(0, L - offA - offB), offA, offB };
+}
+
+const CAM_MAGNET = 40; // cm
+/** distanza della telecamera dalla faccia del muro (è montata sul muro) */
+const CAM_GAP = 4;
+
+/**
+ * Appoggia la telecamera alla parete vicina (o nell'angolo tra due pareti), rivolta verso la stanza.
+ * Ritorna anche la direzione "naturale" (perpendicolare alla parete o bisettrice dell'angolo).
+ */
+export function magnetCamera(p: Project, at: V): { x: number; y: number; rotation: number } | null {
+  const lines: { pt: V; dir: V; nn: V; d: number }[] = [];
+  for (const w of Object.values(p.walls)) {
+    const A = p.nodes[w.a];
+    const B = p.nodes[w.b];
+    const pj = projectOnSegment(at, A, B);
+    if (pj.t < 0 || pj.t > 1 || pj.dist < 1) continue;
+    const faceDist = pj.dist - w.thickness / 2;
+    if (faceDist > CAM_MAGNET) continue;
+    const dir = norm(sub(B, A));
+    const n = perp(dir);
+    const nn = mul(n, (at.x - pj.point.x) * n.x + (at.y - pj.point.y) * n.y > 0 ? 1 : -1);
+    lines.push({ pt: add(pj.point, mul(nn, w.thickness / 2 + CAM_GAP)), dir, nn, d: Math.abs(faceDist) });
+  }
+  if (!lines.length) return null;
+  lines.sort((a, b) => a.d - b.d);
+  const l1 = lines[0];
+  // angolo: seconda parete non parallela
+  const l2 = lines.find((l) => Math.abs(l.dir.x * l1.dir.y - l.dir.y * l1.dir.x) > 0.5);
+  if (l2) {
+    const x = lineIntersect(l1.pt, l1.dir, l2.pt, l2.dir);
+    if (x && Math.hypot(x.x - at.x, x.y - at.y) < CAM_MAGNET * 1.5) {
+      const bis = norm(add(l1.nn, l2.nn));
+      return { x: x.x, y: x.y, rotation: Math.atan2(bis.y, bis.x) };
+    }
+  }
+  return { x: l1.pt.x, y: l1.pt.y, rotation: Math.atan2(l1.nn.y, l1.nn.x) };
 }
