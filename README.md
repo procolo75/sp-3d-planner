@@ -22,6 +22,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 - [4. Stanze](#4-stanze)
 - [5. Porte, finestre, varchi e ante scorrevoli](#5-porte-finestre-varchi-e-ante-scorrevoli)
 - [6. Mobili](#6-mobili)
+- [Porte scorrevoli doppie a scomparsa](#porte-scorrevoli-doppie-a-scomparsa)
 - [7. Arredare una stanza alla volta](#7-arredare-una-stanza-alla-volta)
 - [8. La vista 3D](#8-la-vista-3d)
 - [9. La passeggiata](#9-la-passeggiata)
@@ -40,11 +41,13 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 
 - **Dalla pianta al 3D**: Claude legge la pianta (PDF o foto, anche con le quote) e prepara la mappa; il programma costruisce la casa in 2D e 3D. Oppure disegni i muri a mano.
 - **Muri**: disegnali, spostali, cambia spessore, altezza e colore, e **abbattili**: le stanze si ricalcolano da sole con la superficie e le misure interne.
-- **Porte, finestre, portefinestre, varchi e ante scorrevoli** (tipo IKEA SKYTTA, in vetro trasparente, satinato, bianco o specchio), con le **distanze dai muri** mentre le sposti.
+- **Porte, finestre, portefinestre, varchi e ante scorrevoli** (tipo IKEA SKYTTA, in vetro trasparente, satinato, bianco o specchio), con le **distanze dai muri** mentre le sposti. **Porte scorrevoli doppie a scomparsa** (le ante entrano nel muro) con luce e altezza su misura.
+- **Apri e chiudi le porte**: le porte a battente e quelle a scomparsa si aprono e chiudono con un'animazione, in pianta e in 3D.
 - **Mobili**: mobili generici e oltre **150 articoli IKEA** comuni (PAX, KALLAX, BILLY, MALM, KIVIK, METOD, GODMORGON…), piatti doccia e vasche in tutte le misure comuni, più il **mobile su misura** per qualsiasi altra cosa. Si appoggiano da soli ai muri e mostrano la distanza dalle pareti.
 - **Una stanza alla volta**: pianta e 3D mostrano solo la stanza che stai arredando, da vicino.
 - **3D**: vista d'insieme, vista dall'alto, muri bassi, ombre e **passeggiata** in prima persona.
 - **Telecamere**: metti le telecamere di sorveglianza, scegli angolo di visione e portata e vedi **le zone coperte** e quanta parte di ogni stanza è sorvegliata.
+- **🔒 Blocca**: tocchi e selezioni senza spostare nulla per sbaglio (comodo col pennino o sul tablet).
 - **Salvataggio su PC** in un file, apertura da PC, progetti recenti e versioni precedenti automatiche.
 
 ## Primi passi
@@ -88,6 +91,7 @@ Scegli **Disegno a mano**: parti da un foglio vuoto con lo strumento **Muro** gi
 | Spostare la vista | trascina su uno spazio vuoto, oppure tieni premuto **spazio** e trascina, oppure trascina con il tasto destro o centrale |
 | Vedere tutta la pianta | pulsante **⤢** in basso a destra |
 | Selezionare | strumento **↖ Seleziona** (tasto **V**), poi clic su muro, porta, mobile o stanza |
+| Non spostare niente per sbaglio | pulsante **🔓 Blocca** (diventa **🔒 Bloccato**): il tocco seleziona soltanto e trascinando sposti la vista. Le modifiche dal pannello a destra restano possibili. Clic di nuovo per sbloccare; il browser se lo ricorda |
 | Mostrare/nascondere le misure | pulsante **📐 Quote** in alto a destra |
 | Pianta, 3D o entrambi | pulsanti **2D**, **2D \| 3D**, **3D** in alto a destra |
 
@@ -134,6 +138,8 @@ Le stanze si formano da sole quando i muri chiudono uno spazio.
 
 **Modificare** (seleziona l'apertura): tipo, larghezza, altezza, davanzale e posizione. Puoi **trascinarla** lungo il muro guardando le distanze. Per le porte: **↔ Cerniera** (lato della cerniera) e **⇅ Verso** (verso quale stanza si apre). Una *portafinestra* è una finestra con davanzale 0.
 
+**Aprire e chiudere una porta**: con la porta selezionata, il cursore **Apertura** gira l'anta da 0° (chiusa) a 90°; **Apri**, **Chiudi** e **⇆** la fanno girare con un'animazione. Più veloce: **doppio clic sulla porta**, in pianta o in 3D. Una porta chiusa blocca anche la vista delle telecamere.
+
 **Ante scorrevoli (SKYTTA)**: nel pannello trovi le larghezze SKYTTA (102, 152, 202, 252, 302 cm), le altezze (205, 240 cm), la **finitura** (vetro trasparente, vetro satinato, bianco, specchio) e **Tutto il muro**: le ante prendono tutto il muro e lo sostituiscono, come il fronte di una cabina armadio. Per fare una cabina armadio: disegna con **Muro** il fronte, inserisci lo **Scorrevole** e premi *Tutto il muro*.
 
 ## 6. Mobili
@@ -150,6 +156,15 @@ Con il mobile selezionato:
 - **Canc** lo elimina.
 
 **Mobile su misura**: per qualsiasi mobile che non trovi (anche IKEA), premi **➕ Mobile su misura**, scrivi il nome, scegli il tipo (armadio, libreria, cassettiera, mobile con ante, tavolo, divano, letto) e le misure prese dal sito o dal metro, poi **Metti in pianta**.
+
+### Porte scorrevoli doppie a scomparsa
+
+Nel catalogo, categoria **Porte**: porte scorrevoli a due ante che **scompaiono nel muro** (controtelaio tipo Scrigno), bianche con luce 120, 140, 160 e 180 cm oppure in vetro (120 e 160).
+
+- **Mettila sul muro**: clicca vicino al muro e la porta **entra dentro al muro**, centrata e spessa quanto il muro. In 3D il muro si apre da solo del passaggio: non serve aggiungere un varco.
+- L'**ingombro** in pianta è tutto il controtelaio: **2 × luce + 10 cm** (es. luce 120 → 250 cm di muro). Lascia questo spazio libero da altre porte e angoli.
+- **Misure su misura**: nel pannello scrivi la **Luce** (passaggio libero) e l'**Altezza** che vuoi; il controtelaio si ricalcola da solo.
+- **Apri e chiudi**: cursore **Apertura** (0% chiusa al centro, 100% tutta nel muro), pulsanti **Apri / Chiudi / ⇆** oppure **doppio clic** sulla porta.
 
 > I mobili sono forme semplificate con le **misure di ingombro**, non i modelli 3D originali. Le misure IKEA sono quelle comuni del catalogo: prima di comprare verificale sul sito.
 
@@ -229,6 +244,7 @@ La vista è fermata da muri, finestre, ante scorrevoli non trasparenti e mobili 
 | **Canc** o **⌫** | elimina la selezione (abbatte il muro) |
 | **R** / **Shift+R** | ruota il mobile di 90° / 15°; la telecamera di 15° in un verso o nell'altro |
 | **⌘D** | duplica il mobile o la telecamera |
+| **doppio clic** su una porta | la apre o la chiude (porte a battente e a scomparsa) |
 | **Shift** (tenuto) | disegna/sposta senza agganci |
 | **spazio** + trascina | sposta la vista della pianta |
 | numeri + **Invio** | lunghezza esatta mentre disegni un muro |
@@ -250,7 +266,9 @@ Su Windows e Linux usa **Ctrl** al posto di **⌘**.
 
 **La passeggiata non risponde al mouse.** Dopo *Passeggiata* bisogna **cliccare nella vista 3D**. Per uscire premi **Esc**.
 
-**Funziona su tablet o telefono?** La pianta e il 3D si vedono, ma l'app è pensata per computer con mouse e tastiera.
+**Col pennino sposto le cose per sbaglio.** Premi **🔓 Blocca**: puoi selezionare e modificare dal pannello, ma niente si sposta finché non sblocchi.
+
+**Funziona su tablet o telefono?** La pianta e il 3D si vedono, ma l'app è pensata per computer con mouse e tastiera. Col pennino usa **🔒 Blocca** per non spostare le cose toccandole.
 
 ## Privacy
 
