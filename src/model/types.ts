@@ -37,6 +37,8 @@ export interface Opening {
   flipSide?: boolean;
   /** ante scorrevoli: finitura dei pannelli (default vetro trasparente) */
   finish?: SlidingFinish;
+  /** porta: apertura dell'anta, 0 = chiusa … 1 = aperta a 90° (default) */
+  open?: number;
 }
 
 export interface Item {
@@ -54,6 +56,8 @@ export interface Item {
   color?: string;
   /** nome scelto dall'utente (es. "PAX 150 camera") */
   label?: string;
+  /** porte a scomparsa: apertura 0 (chiusa) … 1 (tutta aperta) */
+  open?: number;
 }
 
 export interface RoomLabel {

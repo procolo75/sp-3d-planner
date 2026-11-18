@@ -1,6 +1,7 @@
-import { add, lineIntersect, mul, norm, perp, projectOnSegment, sub, type V, type WallCorners } from '../model/geom';
+import { add, dist, lineIntersect, mul, norm, perp, projectOnSegment, sub, type V, type WallCorners } from '../model/geom';
 import type { Derived } from '../model/derived';
 import type { Item, Opening, Project } from '../model/types';
+import { CATALOG_BY_ID } from '../catalog/catalog';
 
 /** Angoli dell'ingombro in pianta di un mobile */
 export function itemCorners(it: Pick<Item, 'x' | 'y' | 'w' | 'd' | 'rotation'>): V[] {
@@ -25,7 +26,8 @@ const MAGNET = 35; // cm
  * MAGNET dalla parete o se la sta attraversando; poi lo fa scorrere lungo il muro per non
  * entrare nei muri perpendicolari (angoli). Ritorna null se non c'è un muro vicino.
  */
-export function magnetToWall(p: Project, it: Item, _der?: Derived): { x: number; y: number; rotation: number } | null {
+export function magnetToWall(p: Project, it: Item, _der?: Derived): { x: number; y: number; rotation: number; d?: number } | null {
+  if (CATALOG_BY_ID[it.catalogId]?.pocket) return magnetIntoWall(p, it);
   const c = { x: it.x, y: it.y };
   const uw = { x: Math.cos(it.rotation), y: Math.sin(it.rotation) };
   const ud = { x: -Math.sin(it.rotation), y: Math.cos(it.rotation) };
@@ -87,6 +89,33 @@ export function magnetToWall(p: Project, it: Item, _der?: Derived): { x: number;
   while (r - it.rotation > Math.PI) r -= 2 * Math.PI;
   while (it.rotation - r > Math.PI) r += 2 * Math.PI;
   return { x: Math.round(pos.x * 10) / 10, y: Math.round(pos.y * 10) / 10, rotation: r };
+}
+
+/**
+ * Porte a scomparsa: il controtelaio va DENTRO al muro, centrato sull'asse, parallelo e spesso
+ * quanto il muro (ritorna anche la profondità `d`). Resta tutto dentro al muro se ci sta.
+ */
+function magnetIntoWall(p: Project, it: Item): { x: number; y: number; rotation: number; d: number } | null {
+  let best: { x: number; y: number; rotation: number; d: number; dist: number } | null = null;
+  for (const w of Object.values(p.walls)) {
+    const A = p.nodes[w.a];
+    const B = p.nodes[w.b];
+    const pj = projectOnSegment(it, A, B);
+    if (pj.t <= 0 || pj.t >= 1 || pj.dist > w.thickness / 2 + MAGNET) continue;
+    if (best && pj.dist >= best.dist) continue;
+    const L = dist(A, B);
+    const dir = norm(sub(B, A));
+    let u = pj.t * L;
+    if (L > it.w) u = Math.max(it.w / 2, Math.min(L - it.w / 2, u));
+    const pos = add(A, mul(dir, u));
+    best = { x: pos.x, y: pos.y, rotation: Math.atan2(dir.y, dir.x), d: w.thickness, dist: pj.dist };
+  }
+  if (!best) return null;
+  // la porta è simmetrica: tieni la rotazione equivalente (a meno di π) più vicina all'attuale
+  let r = best.rotation;
+  while (r - it.rotation > Math.PI / 2) r -= Math.PI;
+  while (it.rotation - r > Math.PI / 2) r += Math.PI;
+  return { x: Math.round(best.x * 10) / 10, y: Math.round(best.y * 10) / 10, rotation: r, d: best.d };
 }
 
 /**

@@ -112,3 +112,43 @@ describe('lati delle stanze', () => {
     expect(sides).toEqual([280, 280, 580, 580]);
   });
 });
+
+import { pocketOpenings } from './pocketDoors';
+
+describe('porte scorrevoli doppie a scomparsa', () => {
+  it('si agganciano dentro al muro e ci aprono il passaggio della luce', () => {
+    const p = draft(emptyProject());
+    rect(p, 0, 0, 600, 400, 20);
+    // porta 120 (ingombro 250) cliccata a 25 cm dal muro in alto, ruotata a caso
+    const it: Item = { id: 'pd', catalogId: 'pocket2-120', x: 300, y: 25, z: 0, rotation: 0.4, w: 250, d: 12, h: 217 };
+    const m = magnetToWall(p, it)!;
+    expect(m.y).toBeCloseTo(0, 1); // sull'asse del muro
+    expect(m.d).toBe(20); // spessa quanto il muro
+    expect(Math.abs(Math.sin(m.rotation))).toBeLessThan(1e-9); // parallela al muro
+    p.items.pd = { ...it, ...m };
+    const ops = pocketOpenings(p);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].width).toBe(120);
+    expect(ops[0].height).toBe(210);
+  });
+});
+
+import { CATALOG_BY_ID, itemParts, pocketItemSize } from '../catalog/catalog';
+
+describe('porte a scomparsa: misure su misura e apertura', () => {
+  const cat = CATALOG_BY_ID['pocket2-120'];
+  const leaves = (open: number, luce = 150) => itemParts(cat, { ...pocketItemSize(luce, 230), d: 30, open }).filter((p) => p.t === 'box' && p.s[2] === 4 && p.s[1] > 200);
+  it('chiusa: le ante si toccano al centro; aperta: sono tutte fuori dal passaggio', () => {
+    const closed = leaves(0).map((p) => (p.t === 'box' ? Math.abs(p.p[0]) - p.s[0] / 2 : 0));
+    expect(closed.every((x) => Math.abs(x) < 1e-9)).toBe(true);
+    const open = leaves(1).map((p) => (p.t === 'box' ? Math.abs(p.p[0]) - p.s[0] / 2 : 0));
+    expect(open.every((x) => x >= 75 - 1e-9)).toBe(true); // bordo d'attacco a filo della luce (150/2)
+  });
+  it('luce 150 × 230: il muro si apre di 150 × 230', () => {
+    const p = draft(emptyProject());
+    rect(p, 0, 0, 600, 400, 20);
+    p.items.d = { id: 'd', catalogId: 'pocket2-120', x: 300, y: 0, z: 0, rotation: 0, d: 20, ...pocketItemSize(150, 230) };
+    const [o] = pocketOpenings(p);
+    expect([o.width, o.height]).toEqual([150, 230]);
+  });
+});

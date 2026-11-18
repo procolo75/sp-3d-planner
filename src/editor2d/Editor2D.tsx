@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CATALOG_BY_ID, scaledParts } from '../catalog/catalog';
+import { CATALOG_BY_ID, itemParts, type scaledParts } from '../catalog/catalog';
+import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT } from '../model/pocketAnim';
 import { derive, focusedRoom, useDerived, type Derived } from '../model/derived';
 import { add, dist, dot, mul, norm, perp, pointInPolygon, projectOnSegment, roomSides, sub, v, lineIntersect, type Room, type RoomSide, type V } from '../model/geom';
 import { offsetOnWall, redo, undo, useStore, type SnapPoint } from '../model/store';
@@ -21,7 +22,7 @@ interface View {
 }
 
 type Drag =
-  | { kind: 'pan'; sx: number; sy: number; v0: View; moved: boolean }
+  | { kind: 'pan'; sx: number; sy: number; v0: View; moved: boolean ; keepSel?: boolean }
   | { kind: 'node'; id: string }
   | { kind: 'wall'; id: string; start: V; base: Project; moved: boolean }
   | { kind: 'item'; id: string; off: V; moved: boolean }
@@ -339,6 +340,7 @@ export function Editor2D() {
       const cat = CATALOG_BY_ID[placeCatalogId];
       const tmp: Item = { id: '_', catalogId: cat.id, x: p.x, y: p.y, z: cat.z ?? 0, rotation: 0, w: st0().placeOverrides?.w ?? cat.w, d: st0().placeOverrides?.d ?? cat.d, h: st0().placeOverrides?.h ?? cat.h };
       const m = e.shiftKey ? null : magnetToWall(st.project, tmp, der);
+      if (m?.d) useStore.setState({ placeOverrides: { ...st0().placeOverrides, d: m.d } });
       const id = st.addItem(placeCatalogId, m ?? p, m?.rotation ?? 0);
       if (id) st.select({ kind: 'item', id });
       st.setTool('select');
@@ -347,6 +349,13 @@ export function Editor2D() {
 
     // selezione
     const hit = hitTest(p);
+    if (st.locked) {
+      // bloccato: il tocco seleziona soltanto, trascinando si sposta la vista
+      const sel = hit && hit.kind !== 'rotate' && hit.kind !== 'aim' ? { kind: hit.kind, id: hit.id } : null;
+      if (sel) st.select(sel);
+      dragRef.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, v0: viewRef.current, moved: false, keepSel: !!sel };
+      return;
+    }
     if (hit?.kind === 'rotate') {
       st.beginDrag();
       dragRef.current = { kind: 'rotate', id: hit.id };
@@ -424,7 +433,7 @@ export function Editor2D() {
         const target = sub(p, d.off);
         d.moved = true;
         const m = e.shiftKey ? null : magnetToWall(st.project, { ...it, x: target.x, y: target.y }, derRef.current);
-        st.updateItem(d.id, m ? { x: m.x, y: m.y, rotation: m.rotation } : { x: Math.round(target.x), y: Math.round(target.y) });
+        st.updateItem(d.id, m ? { x: m.x, y: m.y, rotation: m.rotation, ...(m.d ? { d: m.d } : {}) } : { x: Math.round(target.x), y: Math.round(target.y) });
       } else if (d.kind === 'camera') {
         const c = st.project.cameras?.[d.id];
         if (!c) return;
@@ -493,7 +502,7 @@ export function Editor2D() {
     dragRef.current = null;
     if (!d) return;
     if (d.kind === 'pan') {
-      if (!d.moved && e.button === 0 && st.tool === 'select') {
+      if (!d.moved && !d.keepSel && e.button === 0 && st.tool === 'select') {
         const p = toWorld(e.clientX, e.clientY);
         const r = roomAt(p, derRef.current);
         st.select(r ? { kind: 'room', id: r.key } : null);
@@ -514,11 +523,19 @@ export function Editor2D() {
     force((x) => x + 1);
   };
 
-  const onDoubleClick = () => {
+  const onDoubleClick = (e: React.MouseEvent) => {
     if (useStore.getState().tool === 'wall') {
       setDrawStart(null);
       setTyped('');
+      return;
     }
+    // doppio clic su una porta a scomparsa: la apre o la chiude
+    // doppio clic su una porta normale: gira l'anta
+    const hit = hitTest(toWorld(e.clientX, e.clientY));
+    const pr = useStore.getState().project;
+    if (hit?.kind === 'opening' && pr.openings[hit.id]?.type === 'door') return animateDoor(hit.id);
+    const it = hit?.kind === 'item' ? pr.items[hit.id] : null;
+    if (it && CATALOG_BY_ID[it.catalogId]?.pocket) animatePocket(it.id);
   };
 
   const onWheel = useCallback((e: WheelEvent) => {
@@ -700,6 +717,7 @@ export function Editor2D() {
 
         {/* mobili */}
         {Object.values(project.items)
+          .filter((it) => !CATALOG_BY_ID[it.catalogId]?.pocket)
           .sort((a, b) => a.z + a.h - (b.z + b.h))
           .map((it) => (
             <ItemSymbol key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} z={z} />
@@ -733,6 +751,13 @@ export function Editor2D() {
           <OpeningSymbol key={o.id} p={project} o={o} selected={selection?.kind === 'opening' && selection.id === o.id} />
         ))}
         {openingHover && <OpeningSymbol p={project} o={openingHover} ghost />}
+
+        {/* porte a scomparsa: stanno dentro al muro, quindi sopra al muro */}
+        {Object.values(project.items)
+          .filter((it) => CATALOG_BY_ID[it.catalogId]?.pocket)
+          .map((it) => (
+            <ItemSymbol key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} z={z} />
+          ))}
 
         {/* «arreda questa stanza»: il resto della casa resta sbiadito */}
         {(() => {
@@ -1004,11 +1029,14 @@ function OpeningSymbol({ p, o, selected, ghost }: { p: Project; o: Opening; sele
     const other = o.flipHinge ? s0 : s1;
     const side = o.flipSide ? -1 : 1;
     const hingeFace = add(hinge, mul(n, side * h));
-    const leafEnd = add(hingeFace, mul(n, side * o.width));
+    // anta girata dell'angolo di apertura (0 = chiusa nel vano, 1 = 90°)
+    const th = (Math.max(0, Math.min(1, o.open ?? DOOR_OPEN_DEFAULT)) * Math.PI) / 2;
+    const along = norm(sub(other, hinge));
+    const leafEnd = add(hingeFace, mul(add(mul(along, Math.cos(th)), mul(n, side * Math.sin(th))), o.width));
     const otherFace = add(other, mul(n, side * h));
     const sweep = (leafEnd.x - hingeFace.x) * (otherFace.y - hingeFace.y) - (leafEnd.y - hingeFace.y) * (otherFace.x - hingeFace.x) > 0 ? 1 : 0;
     els.push(<line key="leaf" x1={hingeFace.x} y1={hingeFace.y} x2={leafEnd.x} y2={leafEnd.y} stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />);
-    els.push(<path key="arc" d={`M ${leafEnd.x} ${leafEnd.y} A ${o.width} ${o.width} 0 0 ${sweep} ${otherFace.x} ${otherFace.y}`} fill="none" stroke={color} strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />);
+    if (th > 0.02) els.push(<path key="arc" d={`M ${leafEnd.x} ${leafEnd.y} A ${o.width} ${o.width} 0 0 ${sweep} ${otherFace.x} ${otherFace.y}`} fill="none" stroke={color} strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />);
   } else if (o.type === 'sliding') {
     // ante scorrevoli: pannelli sfalsati dentro lo spessore del muro
     const nPanels = o.width > 220 ? 3 : 2;
@@ -1031,7 +1059,7 @@ function OpeningSymbol({ p, o, selected, ghost }: { p: Project; o: Opening; sele
 
 function ItemSymbol({ it, selected, z, ghost }: { it: Item; selected: boolean; z: number; ghost?: boolean }) {
   const cat = CATALOG_BY_ID[it.catalogId];
-  const parts = useMemo(() => (cat ? scaledParts(cat, it.w, it.d, it.h, it.color) : []), [cat, it.w, it.d, it.h, it.color]);
+  const parts = useMemo(() => (cat ? itemParts(cat, { w: it.w, d: it.d, h: it.h, color: it.color, open: it.open }) : []), [cat, it.w, it.d, it.h, it.color, it.open]);
   if (!cat) return null;
   const sorted = [...parts].sort((a, b) => topOf(a) - topOf(b));
   const deg = (it.rotation * 180) / Math.PI;

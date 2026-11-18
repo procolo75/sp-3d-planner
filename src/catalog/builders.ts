@@ -231,3 +231,35 @@ export function slidingWardrobe(w: number, d: number, h: number, c: string): Par
   }
   return parts;
 }
+
+/**
+ * Porta scorrevole doppia a scomparsa (controtelaio tipo Scrigno): l'ingombro è tutto il
+ * controtelaio dentro al muro (2 × luce + 10), alto luce + 7 (coprifilo). Le due ante scorrono
+ * nelle tasche: `open` 0 = chiusa (si toccano al centro), 1 = tutta dentro al muro.
+ * Fuori dalla luce il muro le nasconde.
+ */
+export function pocketDoubleDoor(L: number, leaf: string, glass = false, trim = leaf, open = 0.5, H = 210, D = 12): Part[] {
+  const W = 2 * L + 10;
+  const pocket = (W - L) / 2;
+  const lw = L / 2 + 4;
+  const parts: Part[] = [];
+  for (const sx of [-1, 1]) {
+    // controtelaio: lamiere sulle due facce della tasca
+    for (const sz of [-1, 1]) parts.push(box(sx * (L / 2 + pocket / 2), 0, sz * (D / 2 - 1), pocket, H + 2, 1, '#c9ccd1'));
+    // anta: da chiusa (bordo al centro) a tutta nella tasca (bordo a filo dello stipite)
+    const x = sx * (lw / 2 + Math.max(0, Math.min(1, open)) * (L / 2));
+    if (glass) {
+      parts.push(box(x, 1, 0, lw - 6, H - 8, 1, GLASS, 0.35));
+      parts.push(box(x - (lw / 2 - 1.5), 0.5, 0, 3, H - 2.5, 3, trim), box(x + (lw / 2 - 1.5), 0.5, 0, 3, H - 2.5, 3, trim));
+      parts.push(box(x, 0.5, 0, lw, 4, 3, trim), box(x, H - 6, 0, lw, 4, 3, trim));
+    } else parts.push(box(x, 0.5, 0, lw, H - 2.5, 4, leaf));
+    // maniglia a incasso vicino al bordo d'attacco, sulle due facce
+    for (const sz of [-1, 1]) parts.push(box(x - sx * (lw / 2 - 3), Math.min(95, H * 0.45), sz * 2.3, 2.5, 16, 0.6, STEEL));
+    // coprifili verticali sulle due facce del muro
+    for (const sz of [-1, 1]) parts.push(box(sx * (L / 2 + 3.5), 0, sz * (D / 2 + 0.5), 7, H + 7, 1, trim));
+  }
+  // coprifilo orizzontale e cielino del vano
+  for (const sz of [-1, 1]) parts.push(box(0, H, sz * (D / 2 + 0.5), L + 14, 7, 1, trim));
+  parts.push(box(0, H - 1.5, 0, L, 1.5, D, trim));
+  return parts;
+}

@@ -24,10 +24,15 @@ export interface CatalogItem {
   brand?: string;
   /** mobile su misura creato dall'utente */
   custom?: boolean;
+  /**
+   * porta a scomparsa: va DENTRO al muro (si aggancia sull'asse del muro) e apre nel muro un
+   * passaggio largo `luce` e alto `h` (misure sulle dimensioni di default, scalano con w/h)
+   */
+  pocket?: { luce: number; h: number; glass?: boolean };
 }
 
 import { BLACK, CERAMIC, DARK, FABRIC, FABRIC2, GLASS, GREY, STEEL, WHITE, WOOD, WOOD_D, armchair, bed, box, cabinet, chair, cornerSofa, cyl, drawers, kitchenBase, lamp, plant, shelf, shiftPart, sofa, sph, table, wallCabinet } from './builders';
-import { bathtub, cornerTub, freeTub, showerBox, showerTray } from './builders';
+import { bathtub, cornerTub, freeTub, pocketDoubleDoor, showerBox, showerTray } from './builders';
 import { IKEA } from './ikea';
 export { shade } from './builders';
 
@@ -141,6 +146,14 @@ add({ id: 'outTable', name: 'Tavolo esterno', category: 'Esterno', w: 120, d: 70
 add({ id: 'lounger', name: 'Sdraio', category: 'Esterno', w: 65, d: 190, h: 80, parts: [box(0, 20, 20, 60, 8, 140, '#e0d2b4'), box(0, 28, -60, 60, 50, 8, '#e0d2b4'), box(0, 0, 0, 55, 20, 170, '#8b8f93')] });
 add({ id: 'planter', name: 'Fioriera', category: 'Esterno', w: 80, d: 30, h: 60, parts: [box(0, 0, 0, 80, 35, 30, '#7a5a44'), sph(-20, 45, 0, 18, '#4f8a3f'), sph(15, 48, 0, 20, '#5d9a48')] });
 
+// Porte scorrevoli doppie a scomparsa: l'ingombro è il controtelaio nel muro (2 × luce + 10 cm)
+for (const L of [120, 140, 160, 180]) {
+  add({ id: `pocket2-${L}`, name: `Porta scorrevole doppia a scomparsa ${L}`, category: 'Porte', w: 2 * L + 10, d: 12, h: 217, color: WHITE, pocket: { luce: L, h: 210 }, parts: pocketDoubleDoor(L, WHITE) });
+}
+for (const L of [120, 160]) {
+  add({ id: `pocket2v-${L}`, name: `Porta scorrevole doppia a scomparsa ${L} in vetro`, category: 'Porte', w: 2 * L + 10, d: 12, h: 217, color: WHITE, pocket: { luce: L, h: 210, glass: true }, parts: pocketDoubleDoor(L, GLASS, true, WHITE) });
+}
+
 // mobili "su misura": forme generiche che l'utente porta alle misure che vuole
 add({ id: 'su-box', name: 'Su misura: mobile generico', category: 'Su misura', w: 100, d: 50, h: 80, color: WHITE, parts: cabinet(100, 50, 80, WHITE, 2) });
 add({ id: 'su-armadio', name: 'Su misura: armadio', category: 'Su misura', w: 100, d: 60, h: 220, color: WHITE, parts: cabinet(100, 60, 220, WHITE, 2) });
@@ -155,6 +168,20 @@ for (const it of IKEA) add(it);
 export const CATALOG = C;
 export const CATALOG_BY_ID: Record<string, CatalogItem> = Object.fromEntries(C.map((c) => [c.id, c]));
 export const CATEGORIES = [...new Set(C.map((c) => c.category))];
+
+/** porta a scomparsa: misure del passaggio ricavate dall'ingombro (w = 2 × luce + 10, h = altezza + 7) */
+export const pocketSize = (it: { w: number; h: number }) => ({ luce: Math.max(10, (it.w - 10) / 2), h: Math.max(10, it.h - 7) });
+export const pocketItemSize = (luce: number, h: number) => ({ w: 2 * luce + 10, h: h + 7 });
+/** apertura di default delle porte a scomparsa appena messe */
+export const POCKET_OPEN_DEFAULT = 0.5;
+
+/** Parti di un mobile posizionato: le porte a scomparsa si ricostruiscono alle misure reali e con l'apertura attuale */
+export function itemParts(cat: CatalogItem, it: { w: number; d: number; h: number; color?: string; open?: number }): Part[] {
+  if (!cat.pocket) return scaledParts(cat, it.w, it.d, it.h, it.color);
+  const { luce, h } = pocketSize(it);
+  const c = it.color ?? cat.color ?? WHITE;
+  return cat.pocket.glass ? pocketDoubleDoor(luce, GLASS, true, c, it.open ?? POCKET_OPEN_DEFAULT, h, it.d) : pocketDoubleDoor(luce, c, false, c, it.open ?? POCKET_OPEN_DEFAULT, h, it.d);
+}
 
 /** Parti scalate alle misure dell'oggetto (w,d,h possono differire dal default). Il colore principale sostituisce `color`. */
 export function scaledParts(cat: CatalogItem, w: number, d: number, h: number, color?: string): Part[] {

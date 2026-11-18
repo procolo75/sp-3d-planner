@@ -9,6 +9,24 @@ import { allowEmptySave } from './saveGuard';
 import { CAMERA_COLORS, CAMERA_DEFAULTS } from './coverage';
 import { emptyProject, uid, type Background, type Camera, type ID, type Item, type Opening, type OpeningType, type Project, type RoomLabel, type Wall } from './types';
 
+const LOCK_KEY = 'sp3d-locked';
+function readLocked() {
+  try {
+    return localStorage.getItem(LOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+/** attiva/disattiva il blocco degli spostamenti (ricordato in questo browser) */
+export function setLocked(v: boolean) {
+  useStore.setState({ locked: v });
+  try {
+    localStorage.setItem(LOCK_KEY, v ? '1' : '0');
+  } catch {
+    /* archiviazione non disponibile: il blocco vale solo per questa sessione */
+  }
+}
+
 export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'calibrate' | 'place' | 'detect' | 'camera';
 export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node' | 'camera'; id: string } | null;
 
@@ -26,6 +44,8 @@ interface State {
   showDims: boolean;
   /** mostra le zone viste dalle telecamere */
   showCoverage: boolean;
+  /** «Blocca»: in Seleziona si sceglie ma non si sposta niente (utile col pennino/touch) */
+  locked: boolean;
   /** stanza evidenziata (passando sopra al suo nome nell'elenco) */
   highlightRoom: string | null;
   /** «Arreda questa stanza»: punto (cm) dentro la stanza su cui concentrarsi; null = tutta la casa */
@@ -121,6 +141,7 @@ export const useStore = create<State>()(
         view: 'split',
         showDims: true,
         showCoverage: true,
+        locked: readLocked(),
         highlightRoom: null,
         focus: null,
 

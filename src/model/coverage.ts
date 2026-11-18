@@ -5,6 +5,7 @@ import { add, cross, dist, mul, norm, perp, pointInPolygon, projectOnSegment, su
 import { useMemo } from 'react';
 import { itemCorners } from '../editor2d/snapping';
 import type { Camera, ID, Opening, Project } from './types';
+import { pocketOpenings } from './pocketDoors';
 
 export interface Seg {
   a: V;
@@ -18,13 +19,13 @@ export const CAMERA_COLORS = ['#e63946', '#2a9d8f', '#7b2cbf', '#f4a261', '#1d7c
 
 export const CAMERA_DEFAULTS: Pick<Camera, 'fov' | 'range' | 'z'> = { fov: 90, range: 800, z: 230 };
 
-const passable = (o: Opening) => o.type === 'door' || o.type === 'arch' || (o.type === 'sliding' && (o.finish ?? 'glass') === 'glass');
+const passable = (o: Opening) => (o.type === 'door' && (o.open ?? 1) >= 0.1) || o.type === 'arch' || (o.type === 'sliding' && (o.finish ?? 'glass') === 'glass');
 
 /** segmenti che bloccano la vista */
 export function visionSegments(p: Project, corners: Map<ID, WallCorners>): Seg[] {
   const segs: Seg[] = [];
   const byWall = new Map<ID, Opening[]>();
-  for (const o of Object.values(p.openings)) if (passable(o)) (byWall.get(o.wallId) ?? byWall.set(o.wallId, []).get(o.wallId)!).push(o);
+  for (const o of [...Object.values(p.openings), ...pocketOpenings(p, true)]) if (passable(o)) (byWall.get(o.wallId) ?? byWall.set(o.wallId, []).get(o.wallId)!).push(o);
   const deg = new Map<ID, number>();
   for (const w of Object.values(p.walls)) for (const n of [w.a, w.b]) deg.set(n, (deg.get(n) ?? 0) + 1);
 

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { CAMERA_COLORS, coverageStats, useCoverage, type CoverageStats } from '../model/coverage';
 import type { Room } from '../model/geom';
 import { listBackups, type Backup } from '../model/persist';
-import { CATALOG_BY_ID } from '../catalog/catalog';
+import { CATALOG_BY_ID, POCKET_OPEN_DEFAULT, pocketItemSize, pocketSize } from '../catalog/catalog';
+import { animateOpen, DOOR_OPEN_DEFAULT, setOpen, stopOpen, type OpenRef } from '../model/pocketAnim';
+import type { Item } from '../model/types';
 import { focusedRoom, focusOnRoom, useDerived } from '../model/derived';
 import { dist } from '../model/geom';
 import { parseLength } from '../import/pdf';
@@ -26,6 +28,59 @@ function Num({ label, value, onChange, unit = 'cm', length, step = 1, tip }: { t
       <input value={s} step={step} onChange={(e) => setS(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
       <em>{length ? 'm' : unit}</em>
     </label>
+  );
+}
+
+/** porta scorrevole doppia a scomparsa: misure del passaggio e simulazione di apertura */
+function PocketDoorProps({ it }: { it: Item }) {
+  const st = useStore.getState();
+  const { luce, h } = pocketSize(it);
+  const open = it.open ?? POCKET_OPEN_DEFAULT;
+  const setSize = (l: number, hh: number) => {
+    const sz = pocketItemSize(Math.max(40, Math.round(l)), Math.max(150, Math.round(hh)));
+    // il passaggio resta centrato: cambia solo l'ingombro del controtelaio
+    st.updateItem(it.id, sz);
+  };
+  return (
+    <>
+      <Num tip="Larghezza del passaggio libero (le due ante insieme)" label="Luce" value={luce} onChange={(v) => setSize(v, h)} />
+      <Num tip="Altezza del passaggio (ante)" label="Altezza" value={h} onChange={(v) => setSize(luce, v)} />
+      <Num tip="Spessore del muro che ospita il controtelaio: si adegua da solo quando la porta si aggancia al muro" label="Spessore muro" value={it.d} onChange={(v) => st.updateItem(it.id, { d: Math.max(5, v) })} />
+      <p className="muted small" style={{ margin: '2px 0 6px' }}>
+        Controtelaio nel muro: {Math.round(it.w)} × {Math.round(it.h)} cm (2 × luce + 10)
+      </p>
+      <OpenControls r={{ kind: 'item', id: it.id }} open={open} />
+    </>
+  );
+}
+
+/** simulazione apertura/chiusura: cursore + Apri/Chiudi animati (porte a scomparsa e porte normali) */
+function OpenControls({ r, open, door }: { r: OpenRef; open: number; door?: boolean }) {
+  const st = useStore.getState();
+  return (
+    <>
+      <label className="prop" data-tip={door ? "Trascina per girare l'anta (100% = aperta a 90°)" : 'Trascina per aprire o chiudere le ante'}>
+        <span>Apertura</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(open * 100)}
+          onPointerDown={() => {
+            stopOpen(r);
+            st.beginDrag();
+          }}
+          onPointerUp={() => st.endDrag()}
+          onChange={(e) => setOpen(r, Number(e.target.value) / 100)}
+        />
+        <em>{door ? `${Math.round(open * 90)}°` : `${Math.round(open * 100)}%`}</em>
+      </label>
+      <div className="row">
+        <button onClick={() => animateOpen(r, 1)} data-tip={door ? "L'anta gira fino a 90°" : 'Le ante scorrono dentro al muro'}>Apri</button>
+        <button onClick={() => animateOpen(r, 0)} data-tip={door ? "L'anta si chiude nel vano" : 'Le ante escono e si chiudono al centro'}>Chiudi</button>
+        <button onClick={() => animateOpen(r)} data-tip="Apri o chiudi (anche con doppio clic sulla porta)">⇆</button>
+      </div>
+    </>
   );
 }
 
@@ -186,6 +241,7 @@ export function Properties() {
         </label>
         <Num label="Larghezza" value={o.width} onChange={(v) => st.updateOpening(o.id, { width: Math.max(20, v) })} />
         <Num label="Altezza" value={o.height} onChange={(v) => st.updateOpening(o.id, { height: Math.max(20, v) })} />
+        {o.type === 'door' && <OpenControls r={{ kind: 'opening', id: o.id }} open={o.open ?? DOOR_OPEN_DEFAULT} door />}
         {o.type === 'window' && <Num label="Davanzale" value={o.sill} onChange={(v) => st.updateOpening(o.id, { sill: Math.max(0, v) })} />}
         <Num tip="Distanza del centro dell'apertura dall'inizio del muro, in cm" label="Posizione" value={o.offset} onChange={(v) => st.updateOpening(o.id, { offset: v })} />
         {o.type === 'sliding' && (
@@ -248,10 +304,16 @@ export function Properties() {
         <h3>{it.label || cat?.name || 'Mobile'}</h3>
         {it.label && cat && <p className="muted small" style={{ margin: 0 }}>{cat.name}</p>}
         <RoomName value={it.label ?? ''} placeholder="nome (facoltativo)" onChange={(label) => st.updateItem(it.id, { label: label || undefined })} />
-        <Num label="Larghezza" value={it.w} onChange={(v) => st.updateItem(it.id, { w: Math.max(1, v) })} />
-        <Num label="Profondità" value={it.d} onChange={(v) => st.updateItem(it.id, { d: Math.max(1, v) })} />
-        <Num label="Altezza" value={it.h} onChange={(v) => st.updateItem(it.id, { h: Math.max(1, v) })} />
-        <Num tip="Altezza da terra (es. per pensili e mensole)" label="Da terra" value={it.z} onChange={(v) => st.updateItem(it.id, { z: Math.max(0, v) })} />
+        {cat?.pocket ? (
+          <PocketDoorProps it={it} />
+        ) : (
+          <>
+            <Num label="Larghezza" value={it.w} onChange={(v) => st.updateItem(it.id, { w: Math.max(1, v) })} />
+            <Num label="Profondità" value={it.d} onChange={(v) => st.updateItem(it.id, { d: Math.max(1, v) })} />
+            <Num label="Altezza" value={it.h} onChange={(v) => st.updateItem(it.id, { h: Math.max(1, v) })} />
+            <Num tip="Altezza da terra (es. per pensili e mensole)" label="Da terra" value={it.z} onChange={(v) => st.updateItem(it.id, { z: Math.max(0, v) })} />
+          </>
+        )}
         <Num label="Rotazione" unit="°" value={Math.round(((((it.rotation * 180) / Math.PI) % 360) + 360) % 360)} onChange={(v) => st.updateItem(it.id, { rotation: (v * Math.PI) / 180 })} />
         {cat?.color && (
           <label className="prop">
@@ -262,7 +324,7 @@ export function Properties() {
         <div className="row">
           <button onClick={() => st.updateItem(it.id, { rotation: it.rotation + Math.PI / 2 })} data-tip="Ruota di 90° (tasto R; Shift+R per 15°)">⟳ 90°</button>
           <button onClick={() => st.duplicateItem(it.id)} data-tip="Crea una copia accanto (⌘D)">Duplica</button>
-          <button onClick={() => st.updateItem(it.id, { w: cat.w, d: cat.d, h: cat.h, color: undefined })} data-tip="Torna alle misure e al colore originali">Ripristina</button>
+          <button onClick={() => st.updateItem(it.id, { w: cat.w, d: cat.d, h: cat.h, color: undefined, open: undefined })} data-tip="Torna alle misure e al colore originali">Ripristina</button>
         </div>
         <button className="danger" onClick={() => st.deleteItem(it.id)}>
           Elimina

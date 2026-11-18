@@ -2,7 +2,8 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { ContactShadows, OrbitControls, PointerLockControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { CATALOG_BY_ID, scaledParts } from '../catalog/catalog';
+import { CATALOG_BY_ID, itemParts } from '../catalog/catalog';
+import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT } from '../model/pocketAnim';
 import { derive, focusedRoom, useDerived } from '../model/derived';
 import { add, labelPoint, mul, norm, perp, pointInPolygon, sub } from '../model/geom';
 import { degree } from '../model/ops';
@@ -11,6 +12,7 @@ import type { Camera, Item, Opening, Project } from '../model/types';
 import { useCoverage } from '../model/coverage';
 import { magnetToWall } from '../editor2d/snapping';
 import { buildFloorGeometry, buildWallGeometry, S } from './wallGeometry';
+import { pocketOpenings } from '../model/pocketDoors';
 
 export function Scene3D() {
   const [walk, setWalk] = useState(false);
@@ -327,7 +329,7 @@ function World({ cutaway, interactive }: { cutaway: boolean; interactive: boolea
 
   const wallGeos = useMemo(() => {
     const byWall = new Map<string, Opening[]>();
-    for (const o of Object.values(project.openings)) {
+    for (const o of [...Object.values(project.openings), ...pocketOpenings(project)]) {
       if (!byWall.has(o.wallId)) byWall.set(o.wallId, []);
       byWall.get(o.wallId)!.push(o);
     }
@@ -497,18 +499,29 @@ function Opening3D({ p, o, cutaway, isSel }: { p: Project; o: Opening; cutaway: 
     );
   }
   if (o.type === 'door') {
-    // anta aperta a 90° sul lato scelto
+    // anta girata sui cardini verso il lato scelto: 0 = chiusa nel vano, 1 = aperta a 90°
     const hingeU = o.flipHinge ? o.offset + o.width / 2 : o.offset - o.width / 2;
     const side = o.flipSide ? -1 : 1;
-    const hinge = add(add(A, mul(dir, hingeU)), mul(n, side * (w.thickness / 2)));
-    const leafMid = add(hinge, mul(n, (side * o.width) / 2));
+    const along = o.flipHinge ? mul(dir, -1) : dir;
+    const th = (Math.max(0, Math.min(1, o.open ?? DOOR_OPEN_DEFAULT)) * Math.PI) / 2;
+    const v = add(mul(along, Math.cos(th)), mul(n, side * Math.sin(th)));
+    const hinge = add(add(A, mul(dir, hingeU)), mul(n, side * Math.max(0, w.thickness / 2 - 2)));
+    const leafMid = add(hinge, mul(v, o.width / 2));
+    const knob = add(hinge, mul(v, o.width - 7));
     const h = cutaway ? Math.min(o.height, 110) : o.height;
+    const rot = -Math.atan2(v.y, v.x);
     return (
-      <group>
-        <mesh position={[leafMid.x * S, (h / 2) * S, leafMid.y * S]} rotation-y={ang + Math.PI / 2} castShadow>
+      <group onDoubleClick={(e) => (e.stopPropagation(), animateDoor(o.id))}>
+        <mesh position={[leafMid.x * S, (h / 2) * S, leafMid.y * S]} rotation-y={rot} castShadow>
           <boxGeometry args={[o.width * S, h * S, 0.04]} />
           <meshStandardMaterial color={isSel ? '#7fb2f0' : '#c8a27a'} />
         </mesh>
+        {h > 100 && (
+          <mesh position={[knob.x * S, 1.0, knob.y * S]} rotation-y={rot}>
+            <boxGeometry args={[0.12, 0.02, 0.1]} />
+            <meshStandardMaterial color="#c0c4c8" metalness={0.6} roughness={0.3} />
+          </mesh>
+        )}
       </group>
     );
   }
@@ -560,14 +573,19 @@ const tmpPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 function Item3D({ it, selected, interactive = true }: { it: Item; selected: boolean; interactive?: boolean }) {
   const cat = CATALOG_BY_ID[it.catalogId];
-  const parts = useMemo(() => (cat ? scaledParts(cat, it.w, it.d, it.h, it.color) : []), [cat, it.w, it.d, it.h, it.color]);
+  const parts = useMemo(() => (cat ? itemParts(cat, { w: it.w, d: it.d, h: it.h, color: it.color, open: it.open }) : []), [cat, it.w, it.d, it.h, it.color, it.open]);
   const drag = useRef<{ off: THREE.Vector3 } | null>(null);
   const controls = useThree((s) => s.controls) as any;
   if (!cat) return null;
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    e.stopPropagation();
     const st = useStore.getState();
+    if (st.locked) {
+      // bloccato: seleziona e lascia girare la vista
+      st.select({ kind: 'item', id: it.id });
+      return;
+    }
+    e.stopPropagation();
     st.select({ kind: 'item', id: it.id });
     const hit = new THREE.Vector3();
     e.ray.intersectPlane(tmpPlane, hit);
@@ -597,7 +615,7 @@ function Item3D({ it, selected, interactive = true }: { it: Item; selected: bool
   };
 
   return (
-    <group position={[it.x * S, it.z * S, it.y * S]} rotation-y={-it.rotation} onPointerDown={interactive ? onDown : undefined} onPointerMove={interactive ? onMove : undefined} onPointerUp={interactive ? onUp : undefined}>
+    <group position={[it.x * S, it.z * S, it.y * S]} rotation-y={-it.rotation} onDoubleClick={interactive && cat.pocket ? (e) => (e.stopPropagation(), animatePocket(it.id)) : undefined} onPointerDown={interactive ? onDown : undefined} onPointerMove={interactive ? onMove : undefined} onPointerUp={interactive ? onUp : undefined}>
       {parts.map((pt, i) => {
         const pos: [number, number, number] = [pt.p[0] * S, pt.p[1] * S, pt.p[2] * S];
         const mat = <meshStandardMaterial color={pt.c} transparent={pt.o !== undefined} opacity={pt.o ?? 1} roughness={0.7} />;

@@ -29,7 +29,7 @@ async function openPC() {
 }
 import logoSp from '../assets/logo-sp.svg?raw';
 import logoVolto from '../assets/logo-volto.svg?raw';
-import { isDirty, redo, undo, useStore, type Tool } from '../model/store';
+import { isDirty, redo, setLocked, undo, useStore, type Tool } from '../model/store';
 
 const TOOLS: { t: Tool; label: string; icon: string; tip: string }[] = [
   { t: 'select', label: 'Seleziona', icon: '↖', tip: 'Seleziona e sposta muri, angoli, porte e mobili. Clic su una stanza per darle un nome. (tasto V)' },
@@ -49,6 +49,7 @@ export function Toolbar() {
   const name = useStore((s) => s.project.name);
   const showDims = useStore((s) => s.showDims);
   const showCoverage = useStore((s) => s.showCoverage);
+  const locked = useStore((s) => s.locked);
   const nCameras = useStore((s) => Object.keys(s.project.cameras ?? {}).length);
   const bg = useStore((s) => s.project.background);
   const wallThickness = useStore((s) => s.wallThickness);
@@ -155,6 +156,15 @@ export function Toolbar() {
           </button>
           <button onClick={() => redo()} data-tip="Rifai la modifica annullata (⇧⌘Z)">
             ↷ Ripeti
+          </button>
+        </div>
+        <div className="group">
+          <button
+            className={locked ? 'on' : ''}
+            onClick={() => setLocked(!locked)}
+            data-tip={locked ? 'Bloccato: tocchi e selezioni senza spostare nulla. Clic per sbloccare e tornare a spostare muri, porte e mobili.' : 'Blocca muri, porte, mobili e telecamere: in Seleziona li tocchi (e li modifichi dal pannello a destra) ma non si spostano più per sbaglio, es. col pennino. Trascinando sposti la vista.'}
+          >
+            {locked ? '🔒 Bloccato' : '🔓 Blocca'}
           </button>
         </div>
         <div className="spacer" />
