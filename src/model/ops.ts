@@ -12,6 +12,8 @@ export function draft(p: Project): Project {
     items: { ...p.items },
     labels: { ...p.labels },
     cameras: { ...(p.cameras ?? {}) },
+    lights: { ...(p.lights ?? {}) },
+    sensors: { ...(p.sensors ?? {}) },
   };
 }
 

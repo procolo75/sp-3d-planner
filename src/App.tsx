@@ -10,6 +10,7 @@ import { Toolbar } from './ui/Toolbar';
 import { Tooltip } from './ui/Tooltip';
 import { Notice } from './ui/Notice';
 import { Wizard } from './ui/Wizard';
+import { HaExportDialog } from './ui/HaExportDialog';
 import { FocusBar } from './ui/FocusBar';
 import { Side } from './ui/Side';
 import './App.css';
@@ -18,10 +19,16 @@ export default function App() {
   const view = useStore((s) => s.view);
   const [ready, setReady] = useState(false);
   const [wizard, setWizard] = useState(false);
+  const [haExport, setHaExport] = useState(false);
   useEffect(() => {
     const open = () => setWizard(true);
+    const ha = () => setHaExport(true);
     window.addEventListener('planner:wizard', open);
-    return () => window.removeEventListener('planner:wizard', open);
+    window.addEventListener('planner:ha-export', ha);
+    return () => {
+      window.removeEventListener('planner:wizard', open);
+      window.removeEventListener('planner:ha-export', ha);
+    };
   }, []);
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -63,6 +70,7 @@ export default function App() {
       <Tooltip />
       <Notice />
       {wizard && <Wizard onClose={() => setWizard(false)} />}
+      {haExport && <HaExportDialog onClose={() => setHaExport(false)} />}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { projectOnSegment } from './geom';
 import * as ops from './ops';
 import { allowEmptySave } from './saveGuard';
 import { CAMERA_COLORS, CAMERA_DEFAULTS } from './coverage';
-import { emptyProject, uid, type Background, type Camera, type ID, type Item, type Opening, type OpeningType, type Project, type RoomLabel, type Wall } from './types';
+import { emptyProject, uid, type Background, type Camera, type ID, type Item, type Light, type Sensor, type Opening, type OpeningType, type Project, type RoomLabel, type Wall } from './types';
 
 const LOCK_KEY = 'sp3d-locked';
 function readLocked() {
@@ -27,8 +27,8 @@ export function setLocked(v: boolean) {
   }
 }
 
-export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'calibrate' | 'place' | 'detect' | 'camera';
-export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node' | 'camera'; id: string } | null;
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'calibrate' | 'place' | 'detect' | 'camera' | 'light' | 'sensor';
+export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node' | 'camera' | 'light' | 'sensor'; id: string } | null;
 
 /** Punto risolto dallo snapping: nodo esistente, punto su un muro, o libero */
 export type SnapPoint = { x: number; y: number; nodeId?: ID; wallId?: ID };
@@ -91,6 +91,13 @@ interface State {
   deleteCamera(id: ID): void;
   duplicateCamera(id: ID): ID | null;
 
+  addLight(at: V): ID;
+  updateLight(id: ID, patch: Partial<Light>): void;
+  deleteLight(id: ID): void;
+  addSensor(at: V): ID;
+  updateSensor(id: ID, patch: Partial<Sensor>): void;
+  deleteSensor(id: ID): void;
+
   setLabel(at: V, name: string, existingId?: ID, floorColor?: string): void;
   deleteLabel(id: ID): void;
 
@@ -102,6 +109,14 @@ interface State {
   /** riscala tutto il progetto (pianta, muri, aperture, posizione mobili) attorno a un punto */
   scaleProject(k: number, origin: V): void;
 }
+
+/** colori delle luci: calda (2700K), neutra (4000K), fredda (6000K) */
+export const LIGHT_WARM = '#ffc78a';
+export const LIGHT_COLORS = [
+  { c: LIGHT_WARM, name: 'Calda' },
+  { c: '#fff0d8', name: 'Neutra' },
+  { c: '#dde9ff', name: 'Fredda' },
+];
 
 const OPENING_DEFAULTS: Record<OpeningType, Pick<Opening, 'width' | 'height' | 'sill'>> = {
   door: { width: 80, height: 210, sill: 0 },
@@ -278,6 +293,35 @@ export const useStore = create<State>()(
           return nid;
         },
 
+        addLight: (at) => {
+          const id = uid();
+          mutate((p) => {
+            const n = Object.keys(p.lights!).length;
+            p.lights![id] = { id, x: Math.round(at.x), y: Math.round(at.y), z: 240, entityId: '', label: `Luce ${n + 1}`, color: LIGHT_WARM, intensity: 0.6 };
+          });
+          set({ selection: { kind: 'light', id } });
+          return id;
+        },
+        updateLight: (id, patch) => mutate((p) => p.lights![id] && (p.lights![id] = { ...p.lights![id], ...patch })),
+        deleteLight: (id) => {
+          mutate((p) => delete p.lights![id]);
+          set({ selection: null });
+        },
+        addSensor: (at) => {
+          const id = uid();
+          mutate((p) => {
+            const n = Object.keys(p.sensors!).length;
+            p.sensors![id] = { id, x: Math.round(at.x), y: Math.round(at.y), entityId: '', kind: 'temperature', label: `Sensore ${n + 1}` };
+          });
+          set({ selection: { kind: 'sensor', id } });
+          return id;
+        },
+        updateSensor: (id, patch) => mutate((p) => p.sensors![id] && (p.sensors![id] = { ...p.sensors![id], ...patch })),
+        deleteSensor: (id) => {
+          mutate((p) => delete p.sensors![id]);
+          set({ selection: null });
+        },
+
         setLabel: (at, name, existingId, floorColor) =>
           mutate((p) => {
             const id = existingId ?? uid();
@@ -326,6 +370,8 @@ export const useStore = create<State>()(
             for (const it of Object.values(p.items)) p.items[it.id] = { ...it, ...sc(it) };
             for (const l of Object.values(p.labels)) p.labels[l.id] = { ...l, ...sc(l) };
             for (const c of Object.values(p.cameras!)) p.cameras![c.id] = { ...c, ...sc(c), range: c.range * k };
+            for (const l of Object.values(p.lights!)) p.lights![l.id] = { ...l, ...sc(l) };
+            for (const x of Object.values(p.sensors!)) p.sensors![x.id] = { ...x, ...sc(x) };
             if (p.background) {
               const b = p.background;
               p.background = { ...b, cmPerPx: b.cmPerPx * k, ...sc({ x: b.x, y: b.y }) };
@@ -339,6 +385,8 @@ export const useStore = create<State>()(
           else if (s.kind === 'opening') get().deleteOpening(s.id);
           else if (s.kind === 'item') get().deleteItem(s.id);
           else if (s.kind === 'camera') get().deleteCamera(s.id);
+          else if (s.kind === 'light') get().deleteLight(s.id);
+          else if (s.kind === 'sensor') get().deleteSensor(s.id);
         },
       };
     },
@@ -367,5 +415,5 @@ export function isDirty(s: { project: Project; savedProject: Project | null }) {
   const p = s.project;
   const q = s.savedProject;
   if (!p.id || !q) return true;
-  return p.nodes !== q.nodes || p.walls !== q.walls || p.openings !== q.openings || p.items !== q.items || p.labels !== q.labels || p.cameras !== q.cameras || p.background !== q.background || p.name !== q.name;
+  return p.nodes !== q.nodes || p.walls !== q.walls || p.openings !== q.openings || p.items !== q.items || p.labels !== q.labels || p.cameras !== q.cameras || p.lights !== q.lights || p.sensors !== q.sensors || p.background !== q.background || p.name !== q.name;
 }

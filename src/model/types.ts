@@ -39,6 +39,8 @@ export interface Opening {
   finish?: SlidingFinish;
   /** porta: apertura dell'anta, 0 = chiusa … 1 = aperta a 90° (default) */
   open?: number;
+  /** Home Assistant: sensore di apertura collegato (es. binary_sensor.porta_ingresso) */
+  haEntity?: string;
 }
 
 export interface Item {
@@ -83,6 +85,39 @@ export interface Camera {
   range: number;
   color: string;
   label?: string;
+  /** Home Assistant: entità della telecamera (es. camera.ingresso) */
+  haEntity?: string;
+}
+
+/** Luce di casa collegata a Home Assistant: punto in pianta, altezza e colore della luce */
+export interface Light {
+  id: ID;
+  x: number;
+  y: number;
+  /** altezza da terra (cm) */
+  z: number;
+  /** entità di Home Assistant (es. light.cucina) */
+  entityId: string;
+  label?: string;
+  /** colore della luce */
+  color: string;
+  /** potenza relativa 0…1 */
+  intensity: number;
+}
+
+export type SensorKind = 'temperature' | 'humidity' | 'co2' | 'door' | 'window' | 'generic';
+
+/** sensori binari (aperto/chiuso): in Home Assistant sono binary_sensor */
+export const BINARY_SENSORS: SensorKind[] = ['door', 'window'];
+
+/** Sensore di Home Assistant mostrato in pianta con il suo valore (temperatura, umidità…) */
+export interface Sensor {
+  id: ID;
+  x: number;
+  y: number;
+  entityId: string;
+  kind: SensorKind;
+  label?: string;
 }
 
 export interface Background {
@@ -111,6 +146,9 @@ export interface Project {
   labels: Record<ID, RoomLabel>;
   /** assente nei progetti salvati prima delle telecamere */
   cameras?: Record<ID, Camera>;
+  /** luci e sensori di Home Assistant (assenti nei progetti più vecchi) */
+  lights?: Record<ID, Light>;
+  sensors?: Record<ID, Sensor>;
   background?: Background;
 }
 
@@ -123,6 +161,8 @@ export const emptyProject = (): Project => ({
   items: {},
   labels: {},
   cameras: {},
+  lights: {},
+  sensors: {},
 });
 
 export const uid = () => Math.random().toString(36).slice(2, 10);

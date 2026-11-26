@@ -74,6 +74,8 @@ export async function importJSON(file: File): Promise<Project> {
   p.items ??= {};
   p.labels ??= {};
   p.cameras ??= {};
+  p.lights ??= {};
+  p.sensors ??= {};
   return p;
 }
 

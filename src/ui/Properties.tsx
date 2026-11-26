@@ -4,11 +4,12 @@ import type { Room } from '../model/geom';
 import { listBackups, type Backup } from '../model/persist';
 import { CATALOG_BY_ID, POCKET_OPEN_DEFAULT, pocketItemSize, pocketSize } from '../catalog/catalog';
 import { animateOpen, DOOR_OPEN_DEFAULT, setOpen, stopOpen, type OpenRef } from '../model/pocketAnim';
-import type { Item } from '../model/types';
+import { BINARY_SENSORS, type Item } from '../model/types';
 import { focusedRoom, focusOnRoom, useDerived } from '../model/derived';
 import { dist } from '../model/geom';
 import { parseLength } from '../import/pdf';
-import { useStore } from '../model/store';
+import { LIGHT_COLORS, useStore } from '../model/store';
+import { suggestEntity, validEntityId } from '../ha/entities';
 import { fmtLen, wallRoomSides } from '../editor2d/Editor2D';
 import { wallClearLength } from '../editor2d/snapping';
 
@@ -84,6 +85,51 @@ function OpenControls({ r, open, door }: { r: OpenRef; open: number; door?: bool
   );
 }
 
+/** entità di Home Assistant: campo testo con controllo del formato e proposta dal nome */
+function EntityField({ value, domain, name, onChange, tip }: { value: string | undefined; domain: string; name?: string; onChange: (v: string | undefined) => void; tip?: string }) {
+  const [s, setS] = useState(value ?? '');
+  useEffect(() => setS(value ?? ''), [value]);
+  const commit = () => {
+    const t = s.trim().toLowerCase();
+    if (t !== (value ?? '')) onChange(t || undefined);
+  };
+  const bad = !!value && !validEntityId(value);
+  return (
+    <>
+      <label className="prop" data-tip={tip ?? `Entità di Home Assistant, come la trovi in Impostazioni → Dispositivi → Entità (es. ${suggestEntity(domain, name)})`}>
+        <span>Entità HA</span>
+        <input value={s} placeholder={`${domain}.…`} onChange={(e) => setS(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+      </label>
+      {bad && <p className="warn small">Formato non valido: dominio.nome, minuscole e _ (es. {suggestEntity(domain, name)})</p>}
+      {!value && name && (
+        <button className="link small" onClick={() => onChange(suggestEntity(domain, name))} data-tip="Usa questo nome: controlla che sia uguale a quello in Home Assistant">
+          usa «{suggestEntity(domain, name)}»
+        </button>
+      )}
+    </>
+  );
+}
+
+/** riepilogo di cosa finirà nella mappa di Home Assistant */
+function HaSummary() {
+  const p = useStore((s) => s.project);
+  const nl = Object.keys(p.lights ?? {}).length;
+  const ns = Object.keys(p.sensors ?? {}).length;
+  const nc = Object.values(p.openings).filter((o) => o.haEntity).length;
+  const nt = Object.values(p.cameras ?? {}).filter((c) => c.haEntity).length;
+  return (
+    <div className="rooms">
+      <h4>🏠 Home Assistant</h4>
+      <p className="muted small" style={{ margin: '0 0 4px' }}>
+        {nl} luci · {ns} sensori · {nc} porte/finestre con sensore · {nt} telecamere collegate
+      </p>
+      <button onClick={() => window.dispatchEvent(new Event('planner:ha-export'))} data-tip="Crea la mappa interattiva per la card ha-floorplan">
+        Crea mappa per Home Assistant…
+      </button>
+    </div>
+  );
+}
+
 const FLOOR_COLORS = ['#d9c2a0', '#b98b5e', '#8c6a4f', '#e8e2d6', '#c9c9c9', '#9aa5ad', '#e6d3b3', '#a3b18a'];
 const WALL_COLORS = ['#f4f1ec', '#ffffff', '#e9e1d3', '#d8e2dc', '#cfd8e3', '#f2d7c9', '#b7c4cf', '#8a9a5b'];
 
@@ -133,6 +179,7 @@ export function Properties() {
           </div>
         )}
         {stats && <CameraSummary stats={stats} rooms={der.rooms} roomName={(k) => der.roomLabel.get(k)?.name} />}
+        <HaSummary />
         <Backups />
         <div className="help">
           <h4>Come si usa</h4>
@@ -244,6 +291,9 @@ export function Properties() {
         {o.type === 'door' && <OpenControls r={{ kind: 'opening', id: o.id }} open={o.open ?? DOOR_OPEN_DEFAULT} door />}
         {o.type === 'window' && <Num label="Davanzale" value={o.sill} onChange={(v) => st.updateOpening(o.id, { sill: Math.max(0, v) })} />}
         <Num tip="Distanza del centro dell'apertura dall'inizio del muro, in cm" label="Posizione" value={o.offset} onChange={(v) => st.updateOpening(o.id, { offset: v })} />
+        {o.type !== 'arch' && (
+          <EntityField value={o.haEntity} domain="binary_sensor" onChange={(v) => st.updateOpening(o.id, { haEntity: v })} tip="Sensore di apertura in Home Assistant (es. binary_sensor.porta_ingresso): sulla mappa la porta diventa rossa quando è aperta. Lascia vuoto se non c'è." />
+        )}
         {o.type === 'sliding' && (
           <div className="skytta">
             <span className="muted small">Larghezze SKYTTA</span>
@@ -371,6 +421,7 @@ export function Properties() {
       <aside className="props">
         <h3>📹 {c.label || 'Telecamera'}</h3>
         <RoomName value={c.label ?? ''} placeholder="es. Ingresso" onChange={(label) => st.updateCamera(c.id, { label: label || undefined })} />
+        <EntityField value={c.haEntity} domain="camera" name={c.label} onChange={(v) => st.updateCamera(c.id, { haEntity: v })} tip="Entità della telecamera in Home Assistant (es. camera.ingresso): sulla mappa toccandola vedi le immagini. Lascia vuoto se non c'è." />
         <p className="muted small" style={{ margin: 0 }}>
           Vede circa <b>{seen.toFixed(1).replace('.', ',')} m²</b> della casa
         </p>
@@ -406,6 +457,75 @@ export function Properties() {
           {!useStore.getState().showCoverage && ' La copertura è nascosta: attivala con 📹 Copertura in alto.'}
         </p>
         <button className="danger" onClick={() => st.deleteCamera(c.id)}>
+          Elimina
+        </button>
+      </aside>
+    );
+  }
+
+  if (sel.kind === 'light') {
+    const l = project.lights?.[sel.id];
+    if (!l) return null;
+    return (
+      <aside className="props">
+        <h3>💡 {l.label || 'Luce'}</h3>
+        <RoomName value={l.label ?? ''} placeholder="es. Lampadario cucina" onChange={(label) => st.updateLight(l.id, { label: label || undefined })} />
+        <EntityField value={l.entityId || undefined} domain="light" name={l.label} onChange={(v) => st.updateLight(l.id, { entityId: v ?? '' })} tip="Entità della luce in Home Assistant (es. light.cucina). Può essere anche un interruttore: switch.luce_bagno" />
+        <Num tip="Altezza della lampada da terra: soffitto ~240-270, lampada da tavolo ~120" label="Altezza" value={l.z} onChange={(v) => st.updateLight(l.id, { z: Math.max(10, v) })} />
+        <label className="prop" data-tip="Quanto è forte la luce nel render della mappa">
+          <span>Intensità</span>
+          <input type="range" min={5} max={100} value={Math.round(l.intensity * 100)} onChange={(e) => st.updateLight(l.id, { intensity: +e.target.value / 100 })} />
+          <em>{Math.round(l.intensity * 100)}%</em>
+        </label>
+        <div className="row presets">
+          {LIGHT_COLORS.map((c) => (
+            <button key={c.c} className={l.color === c.c ? 'on' : ''} onClick={() => st.updateLight(l.id, { color: c.c })}>
+              <span className="dot" style={{ background: c.c, display: 'inline-block', width: 10, height: 10, borderRadius: 5, marginRight: 4 }} />
+              {c.name}
+            </button>
+          ))}
+        </div>
+        <p className="muted small">Nella mappa di Home Assistant la stanza si illumina quando la luce è accesa, e toccandola la accendi o spegni.</p>
+        <button className="danger" onClick={() => st.deleteLight(l.id)}>
+          Elimina
+        </button>
+      </aside>
+    );
+  }
+
+  if (sel.kind === 'sensor') {
+    const x = project.sensors?.[sel.id];
+    if (!x) return null;
+    return (
+      <aside className="props">
+        <h3>🌡 {x.label || 'Sensore'}</h3>
+        <RoomName value={x.label ?? ''} placeholder="es. Temperatura salotto" onChange={(label) => st.updateSensor(x.id, { label: label || undefined })} />
+        <label className="prop">
+          <span>Tipo</span>
+          <select value={x.kind} onChange={(e) => st.updateSensor(x.id, { kind: e.target.value as typeof x.kind })}>
+            <option value="temperature">Temperatura</option>
+            <option value="humidity">Umidità</option>
+            <option value="co2">Qualità aria (eCO2 / CO2)</option>
+            <option value="door">Porta aperta/chiusa</option>
+            <option value="window">Finestra aperta/chiusa</option>
+            <option value="generic">Altro</option>
+          </select>
+        </label>
+        <EntityField
+          value={x.entityId || undefined}
+          domain={BINARY_SENSORS.includes(x.kind) ? 'binary_sensor' : 'sensor'}
+          name={x.label}
+          onChange={(v) => st.updateSensor(x.id, { entityId: v ?? '' })}
+          tip={
+            BINARY_SENSORS.includes(x.kind)
+              ? 'Sensore di apertura in Home Assistant (es. binary_sensor.finestra_cucina): sulla mappa diventa rosso e scrive «Aperta» quando è aperto'
+              : x.kind === 'co2'
+                ? 'Sensore eCO2/CO2 in Home Assistant (es. sensor.salotto_eco2, in ppm): verde sotto 800, giallo fino a 1200, rosso oltre'
+                : 'Entità del sensore in Home Assistant (es. sensor.temperatura_salotto): sulla mappa vedi il suo valore aggiornato'
+          }
+        />
+        {BINARY_SENSORS.includes(x.kind) && <p className="muted small">Puoi anche collegare il sensore direttamente alla porta o finestra: selezionala e scrivi l'entità in «Entità HA», così sulla mappa si colora l'apertura stessa.</p>}
+        <button className="danger" onClick={() => st.deleteSensor(x.id)}>
           Elimina
         </button>
       </aside>

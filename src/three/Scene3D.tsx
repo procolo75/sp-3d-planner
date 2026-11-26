@@ -298,13 +298,16 @@ function Walk({ onExit, fov, speed, onFov }: { onExit: () => void; fov: number; 
   return <PointerLockControls selector=".scene3d canvas" onLock={() => (wasLocked.current = true)} onUnlock={() => wasLocked.current && onExit()} />;
 }
 
-function World({ cutaway, interactive }: { cutaway: boolean; interactive: boolean }) {
-  const project = useStore((s) => s.project);
+/** La casa in 3D. `exportMode`: per i render della mappa di Home Assistant (niente selezione, copertura, «arreda stanza» né simboli di luci e sensori). */
+export function World({ cutaway, interactive, exportMode }: { cutaway: boolean; interactive: boolean; exportMode?: boolean }) {
+  const current = useStore((s) => s.project);
+  // render della mappa: porte sempre chiuse, così la luce resta nella sua stanza
+  const project = useMemo(() => (exportMode ? closeAllDoors(current) : current), [current, exportMode]);
   const der = useDerived(project);
-  const selection = useStore((s) => s.selection);
-  const focus = useStore((s) => s.focus);
+  const selection = useStore((s) => (exportMode ? null : s.selection));
+  const focus = useStore((s) => (exportMode ? null : s.focus));
   const fr = focusedRoom(der, focus);
-  const showCoverage = useStore((s) => s.showCoverage);
+  const showCoverage = useStore((s) => s.showCoverage && !exportMode);
   const cov = useCoverage(project, der.corners);
   const covGeos = useMemo(() => {
     if (!showCoverage) return [];
@@ -369,10 +372,12 @@ function World({ cutaway, interactive }: { cutaway: boolean; interactive: boolea
 
   return (
     <group>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.03, 0]} receiveShadow>
-        <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color="#e3e6ea" polygonOffset polygonOffsetFactor={4} polygonOffsetUnits={4} />
-      </mesh>
+      {!exportMode && (
+        <mesh rotation-x={-Math.PI / 2} position={[0, -0.03, 0]} receiveShadow>
+          <planeGeometry args={[400, 400]} />
+          <meshStandardMaterial color="#e3e6ea" polygonOffset polygonOffsetFactor={4} polygonOffsetUnits={4} />
+        </mesh>
+      )}
       {base && !fr && (
         <mesh rotation-x={-Math.PI / 2} position={[base.cx, 0, base.cz]} receiveShadow>
           <planeGeometry args={[base.w, base.d]} />
@@ -421,8 +426,35 @@ function World({ cutaway, interactive }: { cutaway: boolean; interactive: boolea
         .map((c) => (
           <Camera3D key={c.id} c={c} selected={selection?.kind === 'camera' && selection.id === c.id} interactive={interactive} />
         ))}
+      {!exportMode &&
+        Object.values(project.lights ?? {})
+          .filter((l) => !fr || pointInPolygon(l, fr.poly))
+          .map((l) => (
+            <mesh key={l.id} position={[l.x * S, l.z * S, l.y * S]} onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'light', id: l.id })) : undefined}>
+              <sphereGeometry args={[0.07, 16, 12]} />
+              <meshBasicMaterial color={selection?.kind === 'light' && selection.id === l.id ? '#7fb2f0' : '#ffd23f'} />
+            </mesh>
+          ))}
+      {!exportMode &&
+        Object.values(project.sensors ?? {})
+          .filter((x) => !fr || pointInPolygon(x, fr.poly))
+          .map((x) => (
+            <mesh key={x.id} position={[x.x * S, 1.5, x.y * S]} onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'sensor', id: x.id })) : undefined}>
+              <boxGeometry args={[0.08, 0.08, 0.03]} />
+              <meshStandardMaterial color={selection?.kind === 'sensor' && selection.id === x.id ? '#7fb2f0' : '#2a9d8f'} />
+            </mesh>
+          ))}
     </group>
   );
+}
+
+/** copia del progetto con porte a battente e porte a scomparsa chiuse */
+function closeAllDoors(p: Project): Project {
+  const openings = { ...p.openings };
+  for (const o of Object.values(openings)) if (o.type === 'door') openings[o.id] = { ...o, open: 0 };
+  const items = { ...p.items };
+  for (const it of Object.values(items)) if (CATALOG_BY_ID[it.catalogId]?.pocket) items[it.id] = { ...it, open: 0 };
+  return { ...p, openings, items };
 }
 
 function Opening3D({ p, o, cutaway, isSel }: { p: Project; o: Opening; cutaway: boolean; isSel: boolean }) {

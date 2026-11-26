@@ -4,7 +4,7 @@ import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT } from '../model/pocketAn
 import { derive, focusedRoom, useDerived, type Derived } from '../model/derived';
 import { add, dist, dot, mul, norm, perp, pointInPolygon, projectOnSegment, roomSides, sub, v, lineIntersect, type Room, type RoomSide, type V } from '../model/geom';
 import { offsetOnWall, redo, undo, useStore, type SnapPoint } from '../model/store';
-import type { Camera, Item, Opening, Project } from '../model/types';
+import type { Camera, Item, Light, Opening, Project, Sensor } from '../model/types';
 import { cameraCoverage, useCoverage } from '../model/coverage';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
@@ -29,7 +29,8 @@ type Drag =
   | { kind: 'rotate'; id: string }
   | { kind: 'opening'; id: string }
   | { kind: 'camera'; id: string; off: V; moved: boolean }
-  | { kind: 'aim'; id: string };
+  | { kind: 'aim'; id: string }
+  | { kind: 'light' | 'sensor'; id: string; off: V };
 
 const NODE_SNAP_PX = 12;
 const WALL_SNAP_PX = 10;
@@ -227,7 +228,7 @@ export function Editor2D() {
 
   // --- hit test ----------------------------------------------------------------
   const hitTest = useCallback(
-    (p: V): { kind: 'node' | 'wall' | 'opening' | 'item' | 'room' | 'rotate' | 'camera' | 'aim'; id: string } | null => {
+    (p: V): { kind: 'node' | 'wall' | 'opening' | 'item' | 'room' | 'rotate' | 'camera' | 'aim' | 'light' | 'sensor'; id: string } | null => {
       const st = useStore.getState();
       const pr = st.project;
       const z = viewRef.current.zoom;
@@ -241,6 +242,9 @@ export function Editor2D() {
       const cams = pr.cameras ?? {};
       if (sel?.kind === 'camera' && cams[sel.id] && dist(aimHandlePos(cams[sel.id], z), p) < 10 / z) return { kind: 'aim', id: sel.id };
       for (const c of Object.values(cams)) if (dist(c, p) < 11 / z) return { kind: 'camera', id: c.id };
+      // luci e sensori di Home Assistant
+      for (const l of Object.values(pr.lights ?? {})) if (dist(l, p) < 10 / z) return { kind: 'light', id: l.id };
+      for (const x of Object.values(pr.sensors ?? {})) if (dist(x, p) < 10 / z) return { kind: 'sensor', id: x.id };
       // nodi (solo vicino a un muro selezionato o con zoom alto)
       for (const n of Object.values(pr.nodes)) if (dist(n, p) < 7 / z) return { kind: 'node', id: n.id };
       // aperture (se più aperture si sovrappongono, ogni clic passa alla successiva)
@@ -325,6 +329,13 @@ export function Editor2D() {
       return;
     }
 
+    if (st.tool === 'light' || st.tool === 'sensor') {
+      if (st.tool === 'light') st.addLight(p);
+      else st.addSensor(p);
+      st.setTool('select');
+      return;
+    }
+
     if (st.tool === 'detect') {
       setRoi({ a: p, b: p });
       return;
@@ -370,6 +381,13 @@ export function Editor2D() {
       st.select({ kind: 'camera', id: hit.id });
       st.beginDrag();
       dragRef.current = { kind: 'camera', id: hit.id, off: sub(p, st.project.cameras![hit.id]), moved: false };
+      return;
+    }
+    if (hit?.kind === 'light' || hit?.kind === 'sensor') {
+      st.select({ kind: hit.kind, id: hit.id });
+      const at = hit.kind === 'light' ? st.project.lights![hit.id] : st.project.sensors![hit.id];
+      st.beginDrag();
+      dragRef.current = { kind: hit.kind, id: hit.id, off: sub(p, at) };
       return;
     }
     if (hit?.kind === 'node') {
@@ -447,6 +465,11 @@ export function Editor2D() {
           const into = Math.cos(c.rotation) * nat.x + Math.sin(c.rotation) * nat.y < 0.05;
           st.updateCamera(d.id, { x: m.x, y: m.y, ...(into ? { rotation: m.rotation } : {}) });
         }
+      } else if (d.kind === 'light' || d.kind === 'sensor') {
+        const t = sub(p, d.off);
+        const at = { x: Math.round(t.x), y: Math.round(t.y) };
+        if (d.kind === 'light') st.updateLight(d.id, at);
+        else st.updateSensor(d.id, at);
       } else if (d.kind === 'aim') {
         const c = st.project.cameras?.[d.id];
         if (!c) return;
@@ -647,6 +670,7 @@ export function Editor2D() {
         if (k === 'p') st.setTool('door');
         if (k === 'f') st.setTool('window');
         if (k === 't') st.setTool('camera');
+        if (k === 'l') st.setTool('light');
       }
     };
     const up = (e: KeyboardEvent) => {
@@ -852,6 +876,14 @@ export function Editor2D() {
         ))}
         {cameraGhost && <CameraSymbol c={cameraGhost.c} z={z} selected={false} ghost />}
 
+        {/* luci e sensori di Home Assistant */}
+        {Object.values(project.lights ?? {}).map((l) => (
+          <LightSymbol key={l.id} l={l} z={z} selected={selection?.kind === 'light' && selection.id === l.id} />
+        ))}
+        {Object.values(project.sensors ?? {}).map((x) => (
+          <SensorSymbol key={x.id} s={x} z={z} selected={selection?.kind === 'sensor' && selection.id === x.id} />
+        ))}
+
         {roi && (
           <rect x={Math.min(roi.a.x, roi.b.x)} y={Math.min(roi.a.y, roi.b.y)} width={Math.abs(roi.a.x - roi.b.x)} height={Math.abs(roi.a.y - roi.b.y)} fill="#2f7de1" fillOpacity={0.08} stroke="#2f7de1" strokeDasharray="6 4" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
         )}
@@ -874,6 +906,8 @@ export function Editor2D() {
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
         {tool === 'place' && 'Clicca per posizionare il mobile (si aggancia ai muri; Shift = libero)'}
         {tool === 'camera' && 'Clicca dove montare la telecamera: si aggancia a pareti e angoli e guarda verso la stanza (Shift = libera). Poi trascina il pallino per cambiare direzione'}
+        {tool === 'light' && 'Clicca dove si trova la luce (di solito al centro della stanza). Poi a destra scrivi la sua entità di Home Assistant (es. light.cucina)'}
+        {tool === 'sensor' && 'Clicca dove vuoi vedere il valore del sensore. Poi a destra scrivi la sua entità di Home Assistant (es. sensor.temperatura_salotto)'}
         {tool === 'select' && 'Clic per selezionare · trascina muri, nodi, mobili · Canc per eliminare/abbattere · R ruota · ⌘D duplica · spazio+trascina per spostare la vista'}
         {tool === 'calibrate' && calib.length < 2 && 'Correggi scala: clicca i due estremi di una misura che conosci (es. un muro o una quota): tutta la pianta verrà riscalata'}
         {tool === 'detect' && 'Trascina un rettangolo attorno all\'appartamento (escludi scale e parti comuni): i muri verranno ricostruiti'}
@@ -991,6 +1025,49 @@ function CameraSymbol({ c, z, selected, ghost }: { c: Camera; z: number; selecte
       {!ghost && c.label && z > 0.35 && (
         <text x={c.x} y={c.y + 20 * k} fontSize={10 * k} textAnchor="middle" fontWeight={700} fill={c.color} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 * k }}>
           {c.label}
+        </text>
+      )}
+    </g>
+  );
+}
+
+/** luce di Home Assistant: lampadina gialla con alone */
+function LightSymbol({ l, z, selected }: { l: Light; z: number; selected: boolean }) {
+  const k = 1 / z;
+  const ok = !!l.entityId;
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <circle cx={l.x} cy={l.y} r={16 * k} fill={l.color} fillOpacity={0.35} />
+      <circle cx={l.x} cy={l.y} r={8 * k} fill="#ffd23f" stroke={selected ? '#1b5fb8' : ok ? '#8a6d00' : '#e63946'} strokeWidth={selected ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" />
+      <text x={l.x} y={l.y + 3.5 * k} fontSize={10 * k} textAnchor="middle" fill="#5a4500" fontWeight={700}>
+        ☀
+      </text>
+      {z > 0.35 && (l.label || !ok) && (
+        <text x={l.x} y={l.y + 22 * k} fontSize={10 * k} textAnchor="middle" fontWeight={700} fill={ok ? '#8a6d00' : '#e63946'} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 * k }}>
+          {l.label || ''}
+          {!ok && ' (senza entità)'}
+        </text>
+      )}
+    </g>
+  );
+}
+
+const SENSOR_ICON = { temperature: '🌡', humidity: '💧', co2: '🫧', door: '🚪', window: '🪟', generic: '◉' } as const;
+
+/** sensore di Home Assistant: etichetta con icona */
+function SensorSymbol({ s, z, selected }: { s: Sensor; z: number; selected: boolean }) {
+  const k = 1 / z;
+  const ok = !!s.entityId;
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <rect x={s.x - 10 * k} y={s.y - 10 * k} width={20 * k} height={20 * k} rx={5 * k} fill="#fff" stroke={selected ? '#1b5fb8' : ok ? '#2a9d8f' : '#e63946'} strokeWidth={selected ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" />
+      <text x={s.x} y={s.y + 4 * k} fontSize={11 * k} textAnchor="middle">
+        {SENSOR_ICON[s.kind]}
+      </text>
+      {z > 0.35 && (s.label || !ok) && (
+        <text x={s.x} y={s.y + 22 * k} fontSize={10 * k} textAnchor="middle" fontWeight={700} fill={ok ? '#2a9d8f' : '#e63946'} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 * k }}>
+          {s.label || ''}
+          {!ok && ' (senza entità)'}
         </text>
       )}
     </g>

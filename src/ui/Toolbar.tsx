@@ -39,6 +39,8 @@ const TOOLS: { t: Tool; label: string; icon: string; tip: string }[] = [
   { t: 'arch', label: 'Varco', icon: '⌒', tip: 'Clic su un muro per aprire un passaggio senza porta.' },
   { t: 'sliding', label: 'Scorrevole', icon: '⇆', tip: 'Ante scorrevoli (es. IKEA SKYTTA): clic su un muro. Sostituiscono una porta o un tratto di muro (fronte della cabina armadio). Larghezza e altezza SKYTTA si scelgono a destra.' },
   { t: 'camera', label: 'Telecamera', icon: '📹', tip: 'Metti una telecamera: clic sul punto dove la monti (si aggancia a pareti e angoli). Trascina il pallino davanti per girarla; angolo di visione e portata si scelgono a destra. Vedi le zone coperte e quanto della casa è sorvegliato. (tasto T)' },
+  { t: 'light', label: 'Luce', icon: '💡', tip: 'Metti una luce di Home Assistant: clic dove si trova (di solito al centro della stanza), poi a destra scrivi la sua entità (es. light.cucina). Serve per la mappa 🏠 Home Assistant. (tasto L)' },
+  { t: 'sensor', label: 'Sensore', icon: '🌡', tip: 'Metti un sensore di Home Assistant (temperatura, umidità…): clic dove vuoi vederne il valore sulla mappa, poi a destra scrivi la sua entità (es. sensor.temperatura_salotto).' },
 ];
 
 export function Toolbar() {
@@ -128,6 +130,9 @@ export function Toolbar() {
           </button>
           <button onClick={() => window.dispatchEvent(new Event('planner:wizard'))} data-tip="Inizia un nuovo progetto (da una pianta o da zero)">
             ✚ Nuovo
+          </button>
+          <button onClick={() => window.dispatchEvent(new Event('planner:ha-export'))} data-tip="Crea la mappa interattiva per Home Assistant (card ha-floorplan): immagine 3D o pianta, luci che si accendono, sensori, porte e telecamere. Scarichi uno ZIP da copiare in /config/www/floorplan/">
+            🏠 Home Assistant
           </button>
         </div>
         {dialog && <ProjectsDialog mode={dialog} onClose={() => setDialog(null)} />}

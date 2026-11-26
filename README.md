@@ -28,6 +28,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 - [9. La passeggiata](#9-la-passeggiata)
 - [10. Salvare e aprire i progetti](#10-salvare-e-aprire-i-progetti)
 - [11. Telecamere e copertura](#11-telecamere-e-copertura)
+- [12. Mappa per Home Assistant](#12-mappa-per-home-assistant)
 - [Scorciatoie da tastiera](#scorciatoie-da-tastiera)
 - [Domande frequenti](#domande-frequenti)
 - [Privacy](#privacy)
@@ -47,6 +48,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 - **Una stanza alla volta**: pianta e 3D mostrano solo la stanza che stai arredando, da vicino.
 - **3D**: vista d'insieme, vista dall'alto, muri bassi, ombre e **passeggiata** in prima persona.
 - **Telecamere**: metti le telecamere di sorveglianza, scegli angolo di visione e portata e vedi **le zone coperte** e quanta parte di ogni stanza è sorvegliata.
+- **Mappa per Home Assistant**: metti luci e sensori, collega porte, finestre e telecamere alle entità di Home Assistant e scarica la mappa interattiva per la card **ha-floorplan** (3D dall'alto, isometrica, prospettica o pianta 2D), con le stanze che si illuminano quando accendi la luce.
 - **🔒 Blocca**: tocchi e selezioni senza spostare nulla per sbaglio (comodo col pennino o sul tablet).
 - **Salvataggio su PC** in un file, apertura da PC, progetti recenti e versioni precedenti automatiche.
 
@@ -233,13 +235,42 @@ Pulsanti in alto a destra della vista 3D:
 
 La vista è fermata da muri, finestre, ante scorrevoli non trasparenti e mobili alti (dai 170 cm in su: armadi, frigo, librerie). Porte e varchi sono considerati **aperti**. La copertura è in pianta (2D): non tiene conto dell'inclinazione verso il basso della telecamera.
 
+## 12. Mappa per Home Assistant
+
+Trasforma la casa in una mappa interattiva per la dashboard di [Home Assistant](https://www.home-assistant.io/), con la card [ha-floorplan](https://experiencelovelace.github.io/ha-floorplan/).
+
+**Collega le entità**
+1. **💡 Luce** (tasto **L**): clicca dove si trova la luce (di solito al centro della stanza). A destra scrivi la sua **entità HA** (es. `light.cucina`, va bene anche `switch.luce_bagno`), l'altezza, l'intensità e il colore (calda, neutra, fredda).
+2. **🌡 Sensore**: clicca dove vuoi vedere il valore, scegli il tipo e scrivi l'entità:
+   - *Temperatura*, *Umidità*, *Altro* (es. `sensor.temperatura_salotto`): mostra il valore;
+   - *Qualità aria (eCO2 / CO2)* (es. `sensor.salotto_eco2`): valore in ppm su sfondo verde (sotto 800), giallo (fino a 1200) o rosso lampeggiante (oltre);
+   - *Porta* / *Finestra aperta/chiusa* (es. `binary_sensor.finestra_cucina`): scrive «Aperta» su sfondo rosso o «Chiusa» su verde.
+3. **Porte e finestre**: selezionale e scrivi il loro sensore di apertura (es. `binary_sensor.porta_ingresso`).
+4. **Telecamere**: selezionale e scrivi l'entità (es. `camera.ingresso`).
+
+L'entità la trovi in Home Assistant in *Impostazioni → Dispositivi e servizi → Entità*. Il riquadro **🏠 Home Assistant** del pannello *Progetto* riassume cosa è collegato.
+
+**Crea la mappa**: premi **🏠 Home Assistant** (in alto, gruppo *File*) e scegli:
+- la **vista**: *3D dall'alto*, *3D isometrica*, *3D prospettica* (con rotazione e inclinazione) o *Pianta 2D* (vettoriale, leggerissima);
+- la dimensione dell'immagine, i **muri bassi** e l'**immagine di giorno** (compare quando il sole è sopra l'orizzonte, entità `sun.sun`);
+- il nome della **cartella**.
+
+Premi **✨ Crea mappa**: nelle viste 3D il programma fa un render della casa al buio e **uno per ogni luce accesa**, che contiene solo la luce della lampada e si somma all'immagine sotto, quindi si vede sia di notte sia sull'immagine di giorno (con le ombre dei muri, la luce passa solo da porte e varchi). Nell'anteprima puoi provare: clicca una stanza per accenderne la luce. Poi **⬇ Scarica ZIP**.
+
+**Installa in Home Assistant**
+1. Installa la card **ha-floorplan** da HACS (*Frontend*, cerca «floorplan»).
+2. Copia la cartella `floorplan` dello ZIP dentro `/config/www/` (risulta `/config/www/floorplan/<nome>/`).
+3. Dashboard → *Modifica* → *Aggiungi card* → *Manuale*, e incolla il file `<nome>.yaml` (o usa **📋 Copia YAML**).
+
+Sulla mappa: toccando una stanza o il pallino giallo accendi e spegni la luce, i sensori mostrano il valore, porte e finestre aperte lampeggiano in rosso, le telecamere aprono le immagini. Gli id degli elementi SVG sono gli entity_id, quindi puoi anche ritoccare a mano SVG, CSS e YAML. Se un'entità ha un nome diverso, correggila nel planner e riesporta.
+
 ## Scorciatoie da tastiera
 
 | Tasti | Azione |
 |---|---|
 | **⌘S** / **⇧⌘S** / **⌘O** | Salva su PC / Salva con nome / Apri da PC |
 | **⌘Z** / **⇧⌘Z** (o **⌘Y**) | Annulla / Ripeti |
-| **V** / **W** / **P** / **F** / **T** | Seleziona / Muro / Porta / Finestra / Telecamera |
+| **V** / **W** / **P** / **F** / **T** / **L** | Seleziona / Muro / Porta / Finestra / Telecamera / Luce |
 | **Esc** | termina il muro, torna a *Seleziona*, deseleziona |
 | **Canc** o **⌫** | elimina la selezione (abbatte il muro) |
 | **R** / **Shift+R** | ruota il mobile di 90° / 15°; la telecamera di 15° in un verso o nell'altro |
@@ -331,6 +362,7 @@ A ogni push su `main` il workflow [`.github/workflows/deploy.yml`](.github/workf
 | `src/three/` | scena 3D: muri con i fori, aperture, mobili, inquadratura, passeggiata |
 | `src/catalog/` | catalogo mobili parametrico (generici e IKEA) |
 | `src/import/` | import della mappa JSON, istruzioni per Claude, lettura PDF |
+| `src/ha/` | mappa per Home Assistant: entità, render 3D, SVG/CSS/YAML per ha-floorplan, ZIP |
 | `src/ui/` | barra, pannelli, procedura *Nuovo progetto*, recenti |
 
 ## Note
