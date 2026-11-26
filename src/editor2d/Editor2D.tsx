@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CATALOG_BY_ID, itemParts, type scaledParts } from '../catalog/catalog';
-import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT } from '../model/pocketAnim';
+import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT, openingOpen } from '../model/pocketAnim';
 import { derive, focusedRoom, useDerived, type Derived } from '../model/derived';
 import { add, dist, dot, mul, norm, perp, pointInPolygon, projectOnSegment, roomSides, sub, v, lineIntersect, type Room, type RoomSide, type V } from '../model/geom';
 import { offsetOnWall, redo, undo, useStore, type SnapPoint } from '../model/store';
@@ -13,7 +13,7 @@ import { faceOffset, itemCorners, magnetCamera, magnetToWall, openingDistances, 
 const st0 = () => useStore.getState();
 
 /** larghezza iniziale per tipo di apertura (SKYTTA: 152 cm) */
-const OPENING_WIDTH: Record<string, number> = { door: 80, window: 120, arch: 90, sliding: 152 };
+const OPENING_WIDTH: Record<string, number> = { door: 80, window: 120, arch: 90, sliding: 152, garage: 250 };
 
 interface View {
   cx: number;
@@ -309,7 +309,7 @@ export function Editor2D() {
       return;
     }
 
-    if (st.tool === 'door' || st.tool === 'window' || st.tool === 'arch' || st.tool === 'sliding') {
+    if (st.tool === 'door' || st.tool === 'window' || st.tool === 'arch' || st.tool === 'sliding' || st.tool === 'garage') {
       const h = nearestWall(st.project, p, 30 / viewRef.current.zoom);
       if (h) {
         const w = st.project.walls[h];
@@ -556,7 +556,7 @@ export function Editor2D() {
     // doppio clic su una porta normale: gira l'anta
     const hit = hitTest(toWorld(e.clientX, e.clientY));
     const pr = useStore.getState().project;
-    if (hit?.kind === 'opening' && pr.openings[hit.id]?.type === 'door') return animateDoor(hit.id);
+    if (hit?.kind === 'opening' && (pr.openings[hit.id]?.type === 'door' || pr.openings[hit.id]?.type === 'garage')) return animateDoor(hit.id);
     const it = hit?.kind === 'item' ? pr.items[hit.id] : null;
     if (it && CATALOG_BY_ID[it.catalogId]?.pocket) animatePocket(it.id);
   };
@@ -699,7 +699,7 @@ export function Editor2D() {
   const selWall = selection?.kind === 'wall' ? selection.id : null;
 
   const openingHover = useMemo(() => {
-    if (!(tool === 'door' || tool === 'window' || tool === 'arch' || tool === 'sliding') || !rawHover) return null;
+    if (!(tool === 'door' || tool === 'window' || tool === 'arch' || tool === 'sliding' || tool === 'garage') || !rawHover) return null;
     const wid = nearestWall(project, rawHover, 30 / z);
     if (!wid) return null;
     const w = project.walls[wid];
@@ -732,11 +732,16 @@ export function Editor2D() {
         <Grid view={view} size={size} />
         {bg?.visible && <image href={bg.dataUrl} x={bg.x} y={bg.y} width={bg.widthPx * bg.cmPerPx} height={bg.heightPx * bg.cmPerPx} opacity={bg.opacity} style={{ pointerEvents: 'none' }} preserveAspectRatio="none" />}
 
-        {/* stanze */}
+        <defs>
+          <pattern id="outdoor-hatch" patternUnits="userSpaceOnUse" width={20} height={20} patternTransform="rotate(45)">
+            <line x1={0} y1={0} x2={0} y2={20} stroke="#9bbf8a" strokeWidth={3} strokeOpacity={0.5} />
+          </pattern>
+        </defs>
+        {/* stanze (gli spazi esterni sono tratteggiati in verde) */}
         {der.rooms.map((r) => {
           const lab = der.roomLabel.get(r.key);
           const sel = (selection?.kind === 'room' && selection.id === r.key) || highlightRoom === r.key;
-          return <polygon key={r.key} points={r.poly.map((q) => `${q.x},${q.y}`).join(' ')} fill={lab?.floorColor ?? '#e9dfcf'} fillOpacity={bg?.visible ? 0.25 : 0.7} stroke={sel ? '#2f7de1' : 'none'} strokeWidth={2} vectorEffect="non-scaling-stroke" />;
+          return <polygon key={r.key} points={r.poly.map((q) => `${q.x},${q.y}`).join(' ')} fill={lab?.outdoor ? 'url(#outdoor-hatch)' : lab?.floorColor ?? '#e9dfcf'} fillOpacity={lab?.outdoor ? 1 : bg?.visible ? 0.25 : 0.7} stroke={sel ? '#2f7de1' : 'none'} strokeWidth={2} vectorEffect="non-scaling-stroke" />;
         })}
 
         {/* mobili */}
@@ -903,6 +908,7 @@ export function Editor2D() {
       <div className="hint">
         {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: si misura dalla faccia del muro a cui agganci · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
         {(tool === 'door' || tool === 'window' || tool === 'arch') && 'Clicca su un muro per inserire'}
+        {tool === 'garage' && 'Clicca su un muro per mettere il portone del garage (250 cm). Poi a destra scegli larghezza, verso e apertura'}
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
         {tool === 'place' && 'Clicca per posizionare il mobile (si aggancia ai muri; Shift = libero)'}
         {tool === 'camera' && 'Clicca dove montare la telecamera: si aggancia a pareti e angoli e guarda verso la stanza (Shift = libera). Poi trascina il pallino per cambiare direzione'}
@@ -1124,6 +1130,17 @@ function OpeningSymbol({ p, o, selected, ghost }: { p: Project; o: Opening; sele
       const b = add(add(s0, mul(dir, (i + 1) * pw + (i < nPanels - 1 ? 4 : 0))), mul(n, h * k));
       els.push(<line key={'p' + i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={3} vectorEffect="non-scaling-stroke" />);
     }
+  } else if (o.type === 'garage') {
+    // portone: pannello sul filo del muro e guide a soffitto (tratteggio) verso l'interno
+    const side = o.flipSide ? -1 : 1;
+    const a = add(s0, mul(n, side * h * 0.6));
+    const b = add(s1, mul(n, side * h * 0.6));
+    els.push(<line key="panel" x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth={3} vectorEffect="non-scaling-stroke" />);
+    const depth = Math.min(o.height, 260) * Math.max(0.15, openingOpen(o));
+    const c0 = add(a, mul(n, side * depth));
+    const c1 = add(b, mul(n, side * depth));
+    const pts = [a, c0, c1, b].map((q) => `${q.x},${q.y}`).join(' ');
+    els.push(<polyline key="track" points={pts} fill="none" stroke={color} strokeWidth={1} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />);
   } else if (o.type === 'window') {
     for (const k of [-0.25, 0.25]) {
       const a = add(s0, mul(n, h * k * 2));
@@ -1136,7 +1153,7 @@ function OpeningSymbol({ p, o, selected, ghost }: { p: Project; o: Opening; sele
 
 function ItemSymbol({ it, selected, z, ghost }: { it: Item; selected: boolean; z: number; ghost?: boolean }) {
   const cat = CATALOG_BY_ID[it.catalogId];
-  const parts = useMemo(() => (cat ? itemParts(cat, { w: it.w, d: it.d, h: it.h, color: it.color, open: it.open }) : []), [cat, it.w, it.d, it.h, it.color, it.open]);
+  const parts = useMemo(() => (cat ? itemParts(cat, { w: it.w, d: it.d, h: it.h, color: it.color, color2: it.color2, open: it.open }) : []), [cat, it.w, it.d, it.h, it.color, it.color2, it.open]);
   if (!cat) return null;
   const sorted = [...parts].sort((a, b) => topOf(a) - topOf(b));
   const deg = (it.rotation * 180) / Math.PI;

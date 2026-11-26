@@ -263,3 +263,52 @@ export function pocketDoubleDoor(L: number, leaf: string, glass = false, trim = 
   parts.push(box(0, H - 1.5, 0, L, 1.5, D, trim));
   return parts;
 }
+
+// --- riscaldamento ------------------------------------------------------------
+
+/** termosifone a elementi (alluminio o ghisa): elementi verticali, collettori in alto e in basso, valvola */
+export function radiator(w: number, d: number, h: number, c: string, kind: 'alu' | 'ghisa' = 'alu'): Part[] {
+  const pitch = kind === 'ghisa' ? 6 : 8;
+  const n = Math.max(2, Math.round(w / pitch));
+  const ew = w / n;
+  const parts: Part[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + ew * (i + 0.5);
+    if (kind === 'ghisa') {
+      // colonne tonde con piedini
+      parts.push(box(x, 6, 0, ew - 1, h - 12, d * 0.45, c), cyl(x, 0, -d / 4, 1.6, h, c), cyl(x, 0, d / 4, 1.6, h, c));
+    } else {
+      // elemento piatto con alette sul fronte
+      parts.push(box(x, 4, 0, ew - 1.2, h - 8, d * 0.5, c), box(x, 6, d / 2 - 1, ew - 1.6, h - 12, 2, shade(c, -0.03)));
+    }
+  }
+  parts.push(box(0, 0, 0, w, 4, d * 0.6, c), box(0, h - 4, 0, w, 4, d * 0.6, c));
+  // valvola termostatica a lato
+  parts.push(cyl(w / 2 + 2, h - 10, 0, 2, 7, '#e8e8e8'), cyl(w / 2 + 2, h - 3, 0, 2.6, 6, '#f4f4f4'));
+  return parts;
+}
+
+/** scaldasalviette da bagno: due montanti e tubi orizzontali a gruppi */
+export function towelWarmer(w: number, h: number, c: string): Part[] {
+  const parts: Part[] = [box(-w / 2 + 1.5, 0, 0, 3, h, 3, c), box(w / 2 - 1.5, 0, 0, 3, h, 3, c)];
+  const groups = Math.max(2, Math.round(h / 45));
+  const gh = h / groups;
+  for (let g = 0; g < groups; g++) for (let k = 0; k < 4; k++) parts.push(box(0, g * gh + 4 + k * ((gh - 14) / 3), 0, w - 3, 2.2, 2.2, c));
+  return parts;
+}
+
+/** split del condizionatore a parete */
+export function splitAc(w: number, d: number, h: number): Part[] {
+  return [box(0, 0, 0, w, h, d, '#f6f6f4'), box(0, 2, d / 2 - 0.5, w - 6, 3, 1, '#d6d8da'), box(w / 2 - 10, h - 6, d / 2, 6, 1.2, 0.6, '#5aa0e6')];
+}
+
+/** stufa a pellet: corpo, vetro fiamma e top */
+export function pelletStove(w: number, d: number, h: number, c: string): Part[] {
+  return [
+    box(0, 0, 0, w, h - 4, d, c),
+    box(0, h - 4, 0, w + 2, 4, d + 2, shade(c, -0.25)),
+    box(0, h * 0.35, d / 2, w * 0.6, h * 0.35, 1, '#1a1a1a'),
+    box(0, h * 0.4, d / 2 + 0.3, w * 0.4, h * 0.12, 0.6, '#ff8a2b'),
+    cyl(0, h, -d / 4, 4, 15, '#3b3f45'),
+  ];
+}

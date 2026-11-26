@@ -19,7 +19,7 @@ export const CAMERA_COLORS = ['#e63946', '#2a9d8f', '#7b2cbf', '#f4a261', '#1d7c
 
 export const CAMERA_DEFAULTS: Pick<Camera, 'fov' | 'range' | 'z'> = { fov: 90, range: 800, z: 230 };
 
-const passable = (o: Opening) => (o.type === 'door' && (o.open ?? 1) >= 0.1) || o.type === 'arch' || (o.type === 'sliding' && (o.finish ?? 'glass') === 'glass');
+const passable = (o: Opening) => (o.type === 'door' && (o.open ?? 1) >= 0.1) || (o.type === 'garage' && (o.open ?? 0) >= 0.5) || o.type === 'arch' || (o.type === 'sliding' && (o.finish ?? 'glass') === 'glass');
 
 /** segmenti che bloccano la vista */
 export function visionSegments(p: Project, corners: Map<ID, WallCorners>): Seg[] {

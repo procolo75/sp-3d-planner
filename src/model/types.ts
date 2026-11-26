@@ -19,7 +19,8 @@ export interface Wall {
 /** sliding = ante scorrevoli (es. IKEA SKYTTA): occupano il vano senza ingombro di apertura */
 export type SlidingFinish = 'glass' | 'frosted' | 'white' | 'mirror';
 
-export type OpeningType = 'door' | 'window' | 'arch' | 'sliding';
+/** garage = portone basculante/sezionale che sale e rientra sotto il soffitto */
+export type OpeningType = 'door' | 'window' | 'arch' | 'sliding' | 'garage';
 
 export interface Opening {
   id: ID;
@@ -37,7 +38,9 @@ export interface Opening {
   flipSide?: boolean;
   /** ante scorrevoli: finitura dei pannelli (default vetro trasparente) */
   finish?: SlidingFinish;
-  /** porta: apertura dell'anta, 0 = chiusa … 1 = aperta a 90° (default) */
+  /** portone del garage: colore del pannello */
+  color?: string;
+  /** porta: apertura dell'anta, 0 = chiusa … 1 = aperta a 90° (default); garage: 0 = chiuso (default) … 1 = tutto alzato */
   open?: number;
   /** Home Assistant: sensore di apertura collegato (es. binary_sensor.porta_ingresso) */
   haEntity?: string;
@@ -58,6 +61,8 @@ export interface Item {
   color?: string;
   /** nome scelto dall'utente (es. "PAX 150 camera") */
   label?: string;
+  /** secondo colore del mobile (es. gambe del tavolo, struttura del letto): vedi colorSlots */
+  color2?: string;
   /** porte a scomparsa: apertura 0 (chiusa) … 1 (tutta aperta) */
   open?: number;
 }
@@ -68,6 +73,8 @@ export interface RoomLabel {
   y: number;
   name: string;
   floorColor?: string;
+  /** spazio esterno (cortile, giardino tra casa e garage): niente pavimento */
+  outdoor?: boolean;
 }
 
 /** Telecamera di sorveglianza: punto in pianta, direzione e angolo di visione */

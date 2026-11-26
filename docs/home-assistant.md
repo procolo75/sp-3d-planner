@@ -14,8 +14,8 @@ Guida per mettere in Home Assistant la mappa creata con SP 3D Planner (card **ha
 3. **Porte e finestre** (facoltativo): selezionale e scrivi il sensore di apertura in «Entità HA». Sulla mappa si colora l'apertura stessa.
 4. **Telecamere** (facoltativo): selezionale e scrivi l'entità, per esempio `camera.ingresso`.
 5. Gli entity_id esatti li trovi in HA in **Impostazioni → Dispositivi e servizi → Entità**. Devono essere **identici**: minuscole e `_`.
-6. Premi **🏠 Home Assistant** (in alto, gruppo File):
-   - scegli la vista;
+6. Apri il menu **File → Mappa per Home Assistant…**:
+   - scegli la vista e **trascina la casa** nel riquadro di anteprima per decidere da dove guardarla (nella vista dall'alto giri la pianta);
    - scegli l'**Aspetto**: **☀ Sempre chiara** (consigliato: casa chiara e senza ombre, le luci accese la illuminano) oppure **🌙 Giorno/notte** (chiara di giorno, buia dopo il tramonto, segue `sun.sun`);
    - premi **✨ Crea mappa**;
    - prova l'anteprima: clic sulle stanze accende le luci, clic sui sensori ne cambia lo stato;

@@ -101,8 +101,9 @@ export function buildWallGeometry(p: Project, w: Wall, c: WallCorners, openings:
 }
 
 /** Geometria del pavimento di una stanza (poligono in cm) a quota y (m). */
-export function buildFloorGeometry(poly: V[], y = 0): THREE.BufferGeometry {
+export function buildFloorGeometry(poly: V[], y = 0, holes: V[][] = []): THREE.BufferGeometry {
   const shape = new THREE.Shape(poly.map((q) => new THREE.Vector2(q.x * S, q.y * S)));
+  for (const h of holes) shape.holes.push(new THREE.Path(h.map((q) => new THREE.Vector2(q.x * S, q.y * S))));
   const g = new THREE.ShapeGeometry(shape);
   // da (x, y) del piano a (x, y, z) 3D
   g.rotateX(Math.PI / 2);

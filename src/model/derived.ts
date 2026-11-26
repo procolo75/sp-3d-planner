@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { computeRooms, computeWallCorners, labelPoint, pointInPolygon, type Room, type WallCorners } from './geom';
+import { computeOutlines, computeRooms, computeWallCorners, labelPoint, pointInPolygon, polygonArea, type Room, type WallCorners } from './geom';
 import type { ID, Project, RoomLabel } from './types';
 
 export interface Derived {
@@ -8,6 +8,8 @@ export interface Derived {
   /** etichetta associata a ciascuna stanza (per chiave) */
   roomLabel: Map<string, RoomLabel>;
   roomLabelPos: Map<string, { x: number; y: number }>;
+  /** contorni esterni di ogni edificio staccato (casa, garage…) */
+  outlines: { x: number; y: number }[][];
 }
 
 export function derive(p: Project): Derived {
@@ -22,7 +24,8 @@ export function derive(p: Project): Derived {
     if (l) roomLabel.set(r.key, l);
     roomLabelPos.set(r.key, labelPoint(r.inner.length >= 3 ? r.inner : r.poly));
   }
-  return { corners, rooms, roomLabel, roomLabelPos };
+  const outlines = computeOutlines(p).filter((o) => Math.abs(polygonArea(o)) >= 5000);
+  return { corners, rooms, roomLabel, roomLabelPos, outlines };
 }
 
 export function useDerived(p: Project): Derived {
@@ -31,6 +34,9 @@ export function useDerived(p: Project): Derived {
 }
 
 /** stanza su cui è concentrata la vista («Arreda questa stanza»), se esiste ancora */
+/** la stanza è segnata come spazio esterno (cortile, giardino): niente pavimento */
+export const isOutdoor = (der: Derived, key: string) => !!der.roomLabel.get(key)?.outdoor;
+
 export function focusedRoom(der: Derived, focus: { x: number; y: number } | null): Room | null {
   if (!focus) return null;
   return der.rooms.find((r) => pointInPolygon(focus, r.poly)) ?? null;

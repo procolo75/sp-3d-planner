@@ -15,7 +15,10 @@ export const VIEW_NAMES: Record<HaView, string> = {
 export interface ViewOpts {
   /** lato lungo dell'immagine, in pixel */
   res: number;
-  /** viste inclinate: da che lato si guarda la casa (gradi, 0 = dal basso della pianta) */
+  /** dimensione esatta dell'immagine in pixel (es. lo schermo del tablet): la casa viene centrata
+   *  e il resto resta vuoto. Se manca, l'immagine prende la forma della casa con lato lungo `res`. */
+  size?: { width: number; height: number };
+  /** da che lato si guarda la casa (gradi, 0 = dal basso della pianta); vista dall'alto: rotazione della pianta */
   azimuth: number;
   /** viste inclinate: quanto dall'alto (gradi sopra l'orizzonte) */
   elevation: number;
@@ -34,6 +37,18 @@ export interface CaptureCamera {
 const MARGIN = 0.04;
 
 /** punti da inquadrare: angoli della casa a terra e in cima ai muri */
+/** direzione «su» dell'immagine nella vista dall'alto, ruotata di `azimuth` (0 = nord della pianta in alto) */
+export function topUp(azimuthDeg: number) {
+  const az = (azimuthDeg * Math.PI) / 180;
+  return new THREE.Vector3(-Math.sin(az), 0, -Math.cos(az));
+}
+
+/** da posizione della camera e punto guardato: rotazione e inclinazione in gradi (stesse convenzioni di viewDir) */
+export function anglesFrom(pos: THREE.Vector3, target: THREE.Vector3) {
+  const d = pos.clone().sub(target).normalize();
+  return { azimuth: (Math.atan2(d.x, d.z) * 180) / Math.PI, elevation: (Math.asin(Math.max(-1, Math.min(1, d.y))) * 180) / Math.PI };
+}
+
 function houseCorners(p: Project, cutaway: boolean): THREE.Vector3[] {
   const ns = Object.values(p.nodes);
   const H = cutaway ? 110 : Math.max(250, ...Object.values(p.walls).map((w) => w.height));
@@ -67,7 +82,7 @@ export function captureCamera(p: Project, view: Exclude<HaView, '2d'>, o: ViewOp
   const center = box.getCenter(new THREE.Vector3());
   if (view === 'top') center.y = 0;
   const dir = viewDir(view, o);
-  const up = view === 'top' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(0, 1, 0);
+  const up = view === 'top' ? topUp(o.azimuth) : new THREE.Vector3(0, 1, 0);
   const radius = box.getSize(new THREE.Vector3()).length();
 
   // estensione della casa vista da quella direzione (camera ortografica)
@@ -91,8 +106,24 @@ export function captureCamera(p: Project, view: Exclude<HaView, '2d'>, o: ViewOp
   maxX += mx;
   minY -= my;
   maxY += my;
-  const aspect = (maxY - minY) / (maxX - minX);
-  const { width, height } = sizeFor(aspect, o.res);
+  let aspect = (maxY - minY) / (maxX - minX);
+  let { width, height } = sizeFor(aspect, o.res);
+  if (o.size) {
+    // formato fisso: allargo l'inquadratura sul lato che avanza, tenendo la casa al centro
+    width = Math.max(16, Math.round(o.size.width));
+    height = Math.max(16, Math.round(o.size.height));
+    const target = height / width;
+    if (aspect < target) {
+      const extra = ((maxX - minX) * target - (maxY - minY)) / 2;
+      minY -= extra;
+      maxY += extra;
+    } else {
+      const extra = ((maxY - minY) / target - (maxX - minX)) / 2;
+      minX -= extra;
+      maxX += extra;
+    }
+    aspect = target;
+  }
 
   let camera: THREE.OrthographicCamera | THREE.PerspectiveCamera;
   if (view !== 'persp') {

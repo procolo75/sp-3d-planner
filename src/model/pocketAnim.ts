@@ -8,6 +8,9 @@ export type OpenRef = { kind: 'item' | 'opening'; id: string };
 
 /** apertura di default delle porte normali: anta a 90° (come prima della simulazione) */
 export const DOOR_OPEN_DEFAULT = 1;
+/** il portone del garage parte chiuso */
+export const GARAGE_OPEN_DEFAULT = 0;
+export const openingOpen = (o: { type: string; open?: number }) => o.open ?? (o.type === 'garage' ? GARAGE_OPEN_DEFAULT : DOOR_OPEN_DEFAULT);
 
 const running = new Map<string, number>();
 /** secondi per passare da tutta chiusa a tutta aperta */
@@ -22,7 +25,7 @@ export function getOpen(r: OpenRef): number | null {
     return it ? (it.open ?? POCKET_OPEN_DEFAULT) : null;
   }
   const o = p.openings[r.id];
-  return o ? (o.open ?? DOOR_OPEN_DEFAULT) : null;
+  return o ? openingOpen(o) : null;
 }
 
 export function setOpen(r: OpenRef, open: number) {

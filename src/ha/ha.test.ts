@@ -67,6 +67,34 @@ describe('camera di export', () => {
     expect(a.x).toBeGreaterThan(0);
     expect(b.x).toBeLessThan(1000);
   });
+  it('dall\'alto ruotata di 90°: la casa diventa verticale e ogni punto resta dentro', () => {
+    const cam = captureCamera(house(), 'top', { res: 1000, azimuth: 90, elevation: 45, cutaway: false })!;
+    expect(cam.height).toBe(1000);
+    expect(cam.width).toBeCloseTo(500, -1);
+    const a = cam.toPixel(0, 0);
+    const b = cam.toPixel(800, 400);
+    // il lato sinistro della pianta (x = 0) finisce in alto
+    expect(a.y).toBeLessThan(b.y);
+    for (const q of [a, b]) {
+      expect(q.x).toBeGreaterThan(0);
+      expect(q.x).toBeLessThan(cam.width);
+      expect(q.y).toBeGreaterThan(0);
+      expect(q.y).toBeLessThan(cam.height);
+    }
+  });
+  it('formato fisso (tablet 1920×1200): misura esatta, casa centrata e tutta dentro', () => {
+    for (const view of ['top', 'iso', 'persp'] as const) {
+      const cam = captureCamera(house(), view, { res: 1000, azimuth: 30, elevation: 40, cutaway: false, size: { width: 1200, height: 1920 } })!;
+      expect([cam.width, cam.height]).toEqual([1200, 1920]);
+      for (const [x, y] of [[0, 0], [800, 0], [0, 400], [800, 400]]) {
+        const q = cam.toPixel(x, y);
+        expect(q.x).toBeGreaterThan(0);
+        expect(q.x).toBeLessThan(1200);
+        expect(q.y).toBeGreaterThan(0);
+        expect(q.y).toBeLessThan(1920);
+      }
+    }
+  });
   it('viste inclinate: tutta la casa dentro all\'immagine', () => {
     for (const view of ['iso', 'persp'] as const) {
       const cam = captureCamera(house(), view, { res: 1200, azimuth: 30, elevation: 40, cutaway: false })!;

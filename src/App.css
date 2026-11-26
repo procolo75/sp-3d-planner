@@ -167,8 +167,9 @@ select {
   color: var(--text);
 }
 .catalog .thumb {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
 }
 .catalog .nm {
   font-size: 11px;
@@ -991,4 +992,173 @@ button.link {
   border: 0;
   border-radius: 8px;
   background: #1c1f24;
+}
+
+/* barra dei menu stile applicazione */
+.menubar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.menubar .menu {
+  position: relative;
+}
+.menubar .mtitle {
+  border-color: transparent;
+  background: transparent;
+  font-weight: 500;
+  padding: 5px 10px;
+}
+.menubar .mtitle:hover,
+.menubar .mtitle.open {
+  background: #e8eef7;
+}
+.menubar .mdrop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 10px 30px #0002, 0 2px 6px #0001;
+}
+.menubar .mdrop > button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: 5px;
+}
+.menubar .mdrop > button:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.menubar .mdrop > button:hover:not(:disabled) .mkeys {
+  color: #fffc;
+}
+.menubar .mcheck {
+  width: 14px;
+  font-weight: 700;
+}
+.menubar .mic {
+  width: 20px;
+}
+.menubar .mlabel {
+  flex: 1;
+}
+.menubar .mkeys {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 18px;
+}
+.menubar hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 4px 6px;
+}
+.menubar .mcustom {
+  padding: 4px 8px 6px 46px;
+}
+.mslider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.toolbar .seg {
+  display: flex;
+}
+.toolbar .seg button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.toolbar .seg button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.toolbar .seg button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+/* export HA: anteprima da trascinare per scegliere la vista */
+.ha-picker {
+  height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.ha-picker:active {
+  cursor: grabbing;
+}
+.ha-angles {
+  align-items: center;
+  justify-content: space-between;
+}
+.ha-opts .prop {
+  grid-template-columns: 90px 1fr;
+}
+
+/* scelta del colore a pastiglie */
+.swatches.picker {
+  align-items: center;
+}
+.swatches.picker button,
+.swatches .custom-color {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #0002;
+}
+.swatches.picker button.on,
+.swatches .custom-color.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px #fff inset, inset 0 0 0 3px #0001;
+}
+.swatches .custom-color {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid #0001;
+  background: conic-gradient(#e63946, #e9c46a, #2a9d8f, #457b9d, #9b5de5, #e63946);
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 0 0 3px #0008;
+  cursor: pointer;
+}
+.swatches .custom-color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.swatches .picked {
+  flex-basis: 100%;
+}
+.color-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ha-size {
+  align-items: center;
+}
+.ha-size label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.ha-size input {
+  width: 74px;
 }

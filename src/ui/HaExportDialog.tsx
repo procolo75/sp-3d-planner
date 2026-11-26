@@ -7,9 +7,22 @@ import { buildBundle, haBase, zipBundle, type BundleFiles } from '../ha/bundle';
 import { buildCss } from '../ha/css';
 import { HaCaptureCanvas, type CaptureApi, type HaLook } from '../ha/HaCaptureCanvas';
 import { VIEW_NAMES, type HaView } from '../ha/views';
+import { HaViewPicker } from '../ha/HaViewPicker';
 import { notify } from './Notice';
 
-const RES = [1024, 1600, 2048];
+/** formati dell'immagine: «adatta» = forma della casa (lato lungo), gli altri = schermi comuni */
+const FORMATS: { id: string; name: string; fit?: number; w?: number; h?: number }[] = [
+  { id: 'fit1024', name: 'Forma della casa · 1024 px', fit: 1024 },
+  { id: 'fit1600', name: 'Forma della casa · 1600 px', fit: 1600 },
+  { id: 'fit2048', name: 'Forma della casa · 2048 px', fit: 2048 },
+  { id: 'fire10', name: 'Fire HD 10 orizzontale · 1920×1200', w: 1920, h: 1200 },
+  { id: 'fire10v', name: 'Fire HD 10 verticale · 1200×1920', w: 1200, h: 1920 },
+  { id: 'fhd', name: 'Full HD 16:9 · 1920×1080', w: 1920, h: 1080 },
+  { id: 'qhd', name: 'Tablet 2K 16:10 · 2560×1600', w: 2560, h: 1600 },
+  { id: 'ipad', name: 'iPad 4:3 · 2048×1536', w: 2048, h: 1536 },
+  { id: 'hd', name: 'Tablet HD · 1280×800', w: 1280, h: 800 },
+];
+const MAX_PX = 4096;
 
 function pngDataUrl(b: Uint8Array) {
   let s = '';
@@ -55,9 +68,17 @@ const sun = $('sun.sun'); if (sun) document.body.addEventListener('keydown', (e)
 export function HaExportDialog({ onClose }: { onClose: () => void }) {
   const project = useStore((s) => s.project);
   const [view, setView] = useState<HaView>('top');
-  const [res, setRes] = useState(1600);
+  const [format, setFormat] = useState('fit1600');
+  /** formato fisso: larghezza e altezza in pixel (anche scritte a mano) */
+  const [size, setSize] = useState({ width: 1920, height: 1200 });
+  const fmt = FORMATS.find((f) => f.id === format);
+  const res = fmt?.fit ?? 1600;
+  const fixed = !fmt?.fit;
   const [azimuth, setAzimuth] = useState(25);
   const [elevation, setElevation] = useState(45);
+  /** vista dall'alto: rotazione della pianta (0 = come nel planner) */
+  const [topRot, setTopRot] = useState(0);
+  const [resetKey, setResetKey] = useState(0);
   const [cutaway, setCutaway] = useState(false);
   const [look, setLook] = useState<HaLook>('bright');
   const [slug, setSlug] = useState(() => slugify(project.name || 'casa'));
@@ -85,7 +106,7 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
       if (view === '2d') bundle = buildBundle(project, view, s);
       else {
         if (!api.current) throw new Error('la scena 3D non è ancora pronta, riprova tra un attimo');
-        const r = await api.current.capture(project, view, { res, azimuth, elevation, cutaway }, ents.lights, look, setBusy);
+        const r = await api.current.capture(project, view, { res, size: fixed ? size : undefined, azimuth: view === 'top' ? topRot : azimuth, elevation, cutaway }, ents.lights, look, setBusy);
         bundle = buildBundle(project, view, s, r);
       }
       // anteprima: le immagini puntano a /local/… di Home Assistant, qui le sostituisco con copie locali
@@ -125,7 +146,6 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const tilted = view === 'iso' || view === 'persp';
   return (
     <div className="wizard-back" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="wizard ha-export">
@@ -140,50 +160,98 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
         <div className="body ha-body">
           <div className="ha-opts">
             {!nWalls && <p className="warn">Disegna prima la casa: non ci sono muri.</p>}
-            <span className="muted small">Vista</span>
-            <div className="row presets">
-              {(Object.keys(VIEW_NAMES) as HaView[]).map((v) => (
-                <button key={v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>
-                  {VIEW_NAMES[v]}
-                </button>
-              ))}
-            </div>
+            <label className="prop">
+              <span>Vista</span>
+              <select value={view} onChange={(e) => setView(e.target.value as HaView)}>
+                {(Object.keys(VIEW_NAMES) as HaView[]).map((v) => (
+                  <option key={v} value={v}>
+                    {VIEW_NAMES[v]}
+                  </option>
+                ))}
+              </select>
+            </label>
             {view !== '2d' && (
               <>
-                <span className="muted small">Dimensione immagine (lato lungo)</span>
-                <div className="row presets">
-                  {RES.map((r) => (
-                    <button key={r} className={res === r ? 'on' : ''} onClick={() => setRes(r)}>
-                      {r} px
-                    </button>
-                  ))}
+                {nWalls > 0 && (
+                  <HaViewPicker
+                    view={view}
+                    azimuth={view === 'top' ? topRot : azimuth}
+                    elevation={elevation}
+                    cutaway={cutaway}
+                    resetKey={resetKey}
+                    aspect={fixed && size.width > 0 && size.height > 0 ? size.width / size.height : undefined}
+                    onChange={(a) => {
+                      if (view === 'top') setTopRot(a.azimuth);
+                      else {
+                        setAzimuth(a.azimuth);
+                        setElevation(a.elevation);
+                      }
+                    }}
+                  />
+                )}
+                <div className="row ha-angles">
+                  <span className="muted small">
+                    {view === 'top' ? `Rotazione ${Math.round(topRot)}°` : `Rotazione ${Math.round(azimuth)}° · Inclinazione ${Math.round(elevation)}°`} — trascina la casa
+                  </span>
+                  <button
+                    className="small"
+                    onClick={() => {
+                      if (view === 'top') setTopRot(0);
+                      else {
+                        setAzimuth(25);
+                        setElevation(45);
+                      }
+                      setResetKey((k) => k + 1);
+                    }}
+                    data-tip="Torna alla vista di partenza"
+                  >
+                    ↺ Reimposta
+                  </button>
                 </div>
-                {tilted && (
-                  <>
-                    <label className="prop" data-tip="Da che lato guardi la casa">
-                      <span>Rotazione</span>
-                      <input type="range" min={-180} max={180} step={5} value={azimuth} onChange={(e) => setAzimuth(+e.target.value)} />
-                      <em>{azimuth}°</em>
+                <label className="prop" data-tip="«Forma della casa»: l'immagine ha la forma della casa. Gli altri formati hanno la misura dello schermo (es. il tablet a muro): la casa sta al centro e riempie lo schermo senza bande">
+                  <span>Formato</span>
+                  <select
+                    value={format}
+                    onChange={(e) => {
+                      const f = FORMATS.find((x) => x.id === e.target.value);
+                      setFormat(e.target.value);
+                      if (f?.w && f.h) setSize({ width: f.w, height: f.h });
+                    }}
+                  >
+                    {FORMATS.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                    <option value="custom">Personalizzato…</option>
+                  </select>
+                </label>
+                {fixed && (
+                  <div className="row ha-size">
+                    <label data-tip="Larghezza dell'immagine in pixel">
+                      X
+                      <input type="number" min={256} max={MAX_PX} step={10} value={size.width} onChange={(e) => (setFormat('custom'), setSize({ ...size, width: Math.min(MAX_PX, Math.max(0, +e.target.value || 0)) }))} onBlur={() => setSize((s) => ({ ...s, width: Math.max(256, s.width) }))} />
                     </label>
-                    <label className="prop" data-tip="Quanto dall'alto: 90° = perpendicolare">
-                      <span>Inclinazione</span>
-                      <input type="range" min={20} max={80} step={5} value={elevation} onChange={(e) => setElevation(+e.target.value)} />
-                      <em>{elevation}°</em>
+                    <button className="small" onClick={() => (setFormat(FORMATS.find((f) => f.w === size.height && f.h === size.width)?.id ?? 'custom'), setSize({ width: size.height, height: size.width }))} data-tip="Scambia: orizzontale ↔ verticale">
+                      ⇄
+                    </button>
+                    <label data-tip="Altezza dell'immagine in pixel">
+                      Y
+                      <input type="number" min={256} max={MAX_PX} step={10} value={size.height} onChange={(e) => (setFormat('custom'), setSize({ ...size, height: Math.min(MAX_PX, Math.max(0, +e.target.value || 0)) }))} onBlur={() => setSize((s) => ({ ...s, height: Math.max(256, s.height) }))} />
                     </label>
-                  </>
+                    <span className="muted small">px</span>
+                  </div>
                 )}
                 <label className="check">
                   <input type="checkbox" checked={cutaway} onChange={(e) => setCutaway(e.target.checked)} /> Muri bassi (si vede meglio dentro le stanze)
                 </label>
-                <span className="muted small">Aspetto</span>
-                <div className="row presets">
-                  <button className={look === 'bright' ? 'on' : ''} onClick={() => setLook('bright')} data-tip="Casa sempre chiara, senza ombre: le luci accese la illuminano">
-                    ☀ Sempre chiara
-                  </button>
-                  <button className={look === 'daynight' ? 'on' : ''} onClick={() => setLook('daynight')} data-tip="Di giorno chiara con le ombre del sole, dopo il tramonto buia (segue sun.sun)">
-                    🌙 Giorno/notte
-                  </button>
-                </div>
+                <label className="prop" data-tip="☀ Sempre chiara: casa chiara e senza ombre, le luci accese la illuminano. 🌙 Giorno/notte: chiara di giorno con le ombre del sole, buia dopo il tramonto (segue sun.sun)">
+                  <span>Aspetto</span>
+                  <select value={look} onChange={(e) => setLook(e.target.value as HaLook)}>
+                    <option value="bright">☀ Sempre chiara</option>
+                    <option value="daynight">🌙 Giorno/notte</option>
+                  </select>
+                </label>
               </>
             )}
             <label className="prop" data-tip="Nome della cartella in Home Assistant: /config/www/floorplan/<nome>/">

@@ -32,7 +32,7 @@ export interface CatalogItem {
 }
 
 import { BLACK, CERAMIC, DARK, FABRIC, FABRIC2, GLASS, GREY, STEEL, WHITE, WOOD, WOOD_D, armchair, bed, box, cabinet, chair, cornerSofa, cyl, drawers, kitchenBase, lamp, plant, shelf, shiftPart, sofa, sph, table, wallCabinet } from './builders';
-import { bathtub, cornerTub, freeTub, pocketDoubleDoor, showerBox, showerTray } from './builders';
+import { shade, bathtub, cornerTub, freeTub, pelletStove, pocketDoubleDoor, radiator, showerBox, showerTray, splitAc, towelWarmer } from './builders';
 import { IKEA } from './ikea';
 export { shade } from './builders';
 
@@ -141,6 +141,19 @@ add({ id: 'vascadoccia', name: 'Vasca 170×70 con parete doccia', category: 'Bag
 add({ id: 'washer', name: 'Lavatrice', category: 'Bagno', w: 60, d: 60, h: 85, parts: [box(0, 0, 0, 60, 85, 60, WHITE), cyl(0, 40, 30, 18, 2, GREY), box(0, 75, 30.5, 56, 8, 1, '#dcdcdc')].map((p) => (p.t === 'cyl' ? { ...p, p: [0, 40, 31] as [number, number, number] } : p)) });
 add({ id: 'towel', name: 'Scaldasalviette', category: 'Bagno', w: 50, d: 8, h: 120, z: 20, parts: Array.from({ length: 10 }, (_, i) => box(0, i * 12, 0, 50, 3, 3, WHITE)).concat([box(-24, 0, 0, 3, 120, 4, WHITE), box(24, 0, 0, 3, 120, 4, WHITE)]) });
 
+// Riscaldamento e clima: i termosifoni si agganciano al muro come gli altri mobili (z = altezza da terra)
+for (const n of [6, 8, 10, 12]) add({ id: `radAlu${n}`, name: `Termosifone alluminio ${n} elementi`, category: 'Riscaldamento', w: n * 8, d: 10, h: 70, z: 15, color: WHITE, parts: radiator(n * 8, 10, 70, WHITE) });
+add({ id: 'radAluAlto', name: 'Termosifone alluminio alto (verticale)', category: 'Riscaldamento', w: 40, d: 10, h: 180, z: 15, color: WHITE, parts: radiator(40, 10, 180, WHITE) });
+add({ id: 'radGhisa', name: 'Termosifone in ghisa', category: 'Riscaldamento', w: 72, d: 16, h: 87, z: 3, color: '#d9d6cf', parts: radiator(72, 16, 87, '#d9d6cf', 'ghisa') });
+add({ id: 'radGhisaL', name: 'Termosifone in ghisa grande', category: 'Riscaldamento', w: 108, d: 16, h: 87, z: 3, color: '#d9d6cf', parts: radiator(108, 16, 87, '#d9d6cf', 'ghisa') });
+add({ id: 'towel50', name: 'Scaldasalviette 50×120', category: 'Riscaldamento', w: 50, d: 5, h: 120, z: 20, color: WHITE, parts: towelWarmer(50, 120, WHITE) });
+add({ id: 'towel60', name: 'Scaldasalviette 60×160', category: 'Riscaldamento', w: 60, d: 5, h: 160, z: 20, color: WHITE, parts: towelWarmer(60, 160, WHITE) });
+add({ id: 'towelAnt', name: 'Scaldasalviette antracite 50×120', category: 'Riscaldamento', w: 50, d: 5, h: 120, z: 20, color: DARK, parts: towelWarmer(50, 120, DARK) });
+add({ id: 'split', name: 'Condizionatore (split a parete)', category: 'Riscaldamento', w: 85, d: 22, h: 29, z: 215, parts: splitAc(85, 22, 29) });
+add({ id: 'fancoil', name: 'Ventilconvettore a pavimento', category: 'Riscaldamento', w: 90, d: 22, h: 60, z: 10, color: WHITE, parts: [box(0, 0, 0, 90, 60, 22, WHITE), box(0, 55, 4, 80, 1, 12, GREY)] });
+add({ id: 'pellet', name: 'Stufa a pellet', category: 'Riscaldamento', w: 50, d: 55, h: 100, color: DARK, parts: pelletStove(50, 55, 100, DARK) });
+add({ id: 'boiler', name: 'Caldaia murale', category: 'Riscaldamento', w: 42, d: 30, h: 72, z: 140, color: WHITE, parts: [box(0, 0, 0, 42, 72, 30, WHITE), box(0, 8, 15.2, 30, 6, 0.5, GREY), ...[-12, -4, 4, 12].map((x) => cyl(x, -10, 0, 1.2, 10, '#c9a24d'))] });
+
 // Esterno
 add({ id: 'outTable', name: 'Tavolo esterno', category: 'Esterno', w: 120, d: 70, h: 72, parts: table(120, 70, 72, '#9aa3a8', '#5d666b') });
 add({ id: 'lounger', name: 'Sdraio', category: 'Esterno', w: 65, d: 190, h: 80, parts: [box(0, 20, 20, 60, 8, 140, '#e0d2b4'), box(0, 28, -60, 60, 50, 8, '#e0d2b4'), box(0, 0, 0, 55, 20, 170, '#8b8f93')] });
@@ -176,20 +189,94 @@ export const pocketItemSize = (luce: number, h: number) => ({ w: 2 * luce + 10, 
 export const POCKET_OPEN_DEFAULT = 0.5;
 
 /** Parti di un mobile posizionato: le porte a scomparsa si ricostruiscono alle misure reali e con l'apertura attuale */
-export function itemParts(cat: CatalogItem, it: { w: number; d: number; h: number; color?: string; open?: number }): Part[] {
-  if (!cat.pocket) return scaledParts(cat, it.w, it.d, it.h, it.color);
+export function itemParts(cat: CatalogItem, it: { w: number; d: number; h: number; color?: string; color2?: string; open?: number }): Part[] {
+  if (!cat.pocket) return scaledParts(cat, it.w, it.d, it.h, it.color, it.color2);
   const { luce, h } = pocketSize(it);
   const c = it.color ?? cat.color ?? WHITE;
   return cat.pocket.glass ? pocketDoubleDoor(luce, GLASS, true, c, it.open ?? POCKET_OPEN_DEFAULT, h, it.d) : pocketDoubleDoor(luce, c, false, c, it.open ?? POCKET_OPEN_DEFAULT, h, it.d);
 }
 
-/** Parti scalate alle misure dell'oggetto (w,d,h possono differire dal default). Il colore principale sostituisce `color`. */
-export function scaledParts(cat: CatalogItem, w: number, d: number, h: number, color?: string): Part[] {
+// --- colori modificabili --------------------------------------------------------
+// Un mobile ha fino a due «famiglie» di colore: un colore e le sue sfumature fatte con shade()
+// (es. il divano e i suoi cuscini un filo più chiari). Cambiando colore cambia tutta la famiglia,
+// mantenendo le sfumature.
+
+const KS = Array.from({ length: 81 }, (_, i) => Math.round((i - 40)) / 100);
+/** k tale che shade(base, k) === c, oppure null */
+function shadeK(base: string, c: string): number | null {
+  if (base === c) return 0;
+  for (const k of KS) if (k && shade(base, k) === c) return k;
+  return null;
+}
+
+function partArea(pt: Part) {
+  if (pt.t === 'box') return 2 * (pt.s[0] * pt.s[1] + pt.s[0] * pt.s[2] + pt.s[1] * pt.s[2]);
+  if (pt.t === 'cyl') return 2 * Math.PI * pt.r * (pt.h + pt.r);
+  return 4 * Math.PI * pt.r * pt.r;
+}
+
+interface Slots {
+  /** colori di partenza delle famiglie (1 o 2) */
+  bases: string[];
+  /** colore della parte → [famiglia, sfumatura] */
+  member: Map<string, [number, number]>;
+}
+const slotCache = new Map<string, Slots>();
+
+function slotsOf(cat: CatalogItem): Slots {
+  let s = slotCache.get(cat.id);
+  if (s) return s;
+  const area = new Map<string, number>();
+  let total = 0;
+  for (const pt of cat.parts) {
+    if (pt.o !== undefined) continue; // vetri: restano vetri
+    const a = partArea(pt);
+    area.set(pt.c, (area.get(pt.c) ?? 0) + a);
+    total += a;
+  }
+  // il colore dichiarato del mobile viene prima, poi i più estesi
+  const colors = [...area.keys()].sort((a, b) => (a === cat.color ? -1 : b === cat.color ? 1 : area.get(b)! - area.get(a)!));
+  const fams: { base: string; area: number; members: [string, number][] }[] = [];
+  for (const c of colors) {
+    let placed = false;
+    for (const f of fams) {
+      const k = shadeK(f.base, c);
+      if (k !== null) {
+        f.members.push([c, k]);
+        f.area += area.get(c)!;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) fams.push({ base: c, area: area.get(c)!, members: [[c, 0]] });
+  }
+  const first = fams[0];
+  // secondo colore solo se è una parte importante del mobile (non maniglie, piedini, rubinetti)
+  const second = fams.slice(1).sort((a, b) => b.area - a.area)[0];
+  const chosen = first ? [first, ...(second && second.area >= total * 0.12 ? [second] : [])] : [];
+  s = { bases: chosen.map((f) => f.base), member: new Map() };
+  chosen.forEach((f, i) => f.members.forEach(([c, k]) => s!.member.set(c, [i, k])));
+  slotCache.set(cat.id, s);
+  return s;
+}
+
+/** colori modificabili del mobile (originali): il primo è il colore principale */
+export function colorSlots(cat: CatalogItem): string[] {
+  if (cat.pocket) return [cat.color ?? WHITE];
+  return slotsOf(cat).bases;
+}
+
+/** Parti scalate alle misure dell'oggetto (w,d,h possono differire dal default), con i colori scelti. */
+export function scaledParts(cat: CatalogItem, w: number, d: number, h: number, color?: string, color2?: string): Part[] {
   const sx = w / cat.w;
   const sy = h / cat.h;
   const sz = d / cat.d;
+  const slots = color || color2 ? slotsOf(cat) : null;
+  const picked = [color, color2];
   return cat.parts.map((pt) => {
-    const c = color && cat.color && pt.c === cat.color ? color : pt.c;
+    const m = slots?.member.get(pt.c);
+    const nc = m && pt.o === undefined ? picked[m[0]] : undefined;
+    const c = nc ? (m![1] ? shade(nc, m![1]) : nc) : pt.c;
     if (pt.t === 'box') return { ...pt, c, p: [pt.p[0] * sx, pt.p[1] * sy, pt.p[2] * sz], s: [pt.s[0] * sx, pt.s[1] * sy, pt.s[2] * sz] };
     if (pt.t === 'cyl') return { ...pt, c, p: [pt.p[0] * sx, pt.p[1] * sy, pt.p[2] * sz], r: pt.r * Math.min(sx, sz), h: pt.h * sy };
     return { ...pt, c, p: [pt.p[0] * sx, pt.p[1] * sy, pt.p[2] * sz], r: pt.r * Math.min(sx, sy, sz) };

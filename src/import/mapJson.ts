@@ -11,7 +11,7 @@ export interface MapData {
   altezza_muri?: number;
   /** altezza facoltativa per singolo muro (es. parapetti 100 cm) */
   muri: { da: Pt; a: Pt; spessore?: number; altezza?: number }[];
-  porte?: { pos: Pt; larghezza?: number; tipo?: 'porta' | 'portafinestra' | 'varco' | 'scorrevole' }[];
+  porte?: { pos: Pt; larghezza?: number; tipo?: 'porta' | 'portafinestra' | 'varco' | 'scorrevole' | 'garage' }[];
   finestre?: { pos: Pt; larghezza?: number; davanzale?: number; altezza?: number }[];
   stanze?: { nome: string; pos: Pt }[];
 }
@@ -104,6 +104,7 @@ export function mapToProject(m: MapData): { project: Project; stats: MapStats } 
     if (t === 'portafinestra') place(d.pos, 'window', d.larghezza ?? 120, 220, 0);
     else if (t === 'varco') place(d.pos, 'arch', d.larghezza ?? 100, 220, 0);
     else if (t === 'scorrevole') place(d.pos, 'sliding', d.larghezza ?? 152, 205, 0);
+    else if (t === 'garage') place(d.pos, 'garage', d.larghezza ?? 250, 215, 0);
     else place(d.pos, 'door', d.larghezza ?? 80, 210, 0);
   }
   for (const f of m.finestre ?? []) place(f.pos, 'window', f.larghezza ?? 120, f.altezza ?? 140, f.davanzale ?? 95);

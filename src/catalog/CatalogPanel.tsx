@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../model/store';
 import { CATALOG, scaledParts, type CatalogItem } from './catalog';
+import { thumbnail } from './thumbs';
 
 type Brand = 'tutti' | 'IKEA' | 'generici';
 
@@ -143,8 +144,20 @@ function CustomForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** miniatura: vista dall'alto generata dalle parti */
+/** miniatura: render 3D di tre quarti (vedi thumbs.ts); finché non è pronta, la vista dall'alto */
 function Thumb({ c }: { c: CatalogItem }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const t = thumbnail(c, setUrl);
+    if (t.url) setUrl(t.url);
+    return t.cancel;
+  }, [c]);
+  if (url) return <img src={url} alt="" className="thumb" draggable={false} />;
+  return <TopThumb c={c} />;
+}
+
+/** vista dall'alto generata dalle parti */
+function TopThumb({ c }: { c: CatalogItem }) {
   const parts = useMemo(() => scaledParts(c, c.w, c.d, c.h).sort((a, b) => top(a) - top(b)), [c]);
   const m = Math.max(c.w, c.d) * 1.1;
   return (

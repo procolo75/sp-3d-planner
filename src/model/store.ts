@@ -27,7 +27,7 @@ export function setLocked(v: boolean) {
   }
 }
 
-export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'calibrate' | 'place' | 'detect' | 'camera' | 'light' | 'sensor';
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'garage' | 'calibrate' | 'place' | 'detect' | 'camera' | 'light' | 'sensor';
 export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node' | 'camera' | 'light' | 'sensor'; id: string } | null;
 
 /** Punto risolto dallo snapping: nodo esistente, punto su un muro, o libero */
@@ -66,6 +66,8 @@ interface State {
 
   addWallSegment(from: SnapPoint, to: SnapPoint): ID | null;
   updateWall(id: ID, patch: Partial<Wall>): void;
+  /** stesso colore a tutti i muri della casa */
+  setAllWallsColor(color: string): void;
   setWallLength(id: ID, L: number): void;
   deleteWall(id: ID): void;
   moveNode(id: ID, at: V, normalizeAfter?: boolean): void;
@@ -98,7 +100,7 @@ interface State {
   updateSensor(id: ID, patch: Partial<Sensor>): void;
   deleteSensor(id: ID): void;
 
-  setLabel(at: V, name: string, existingId?: ID, floorColor?: string): void;
+  setLabel(at: V, name: string, existingId?: ID, floorColor?: string, outdoor?: boolean): void;
   deleteLabel(id: ID): void;
 
   setBackground(bg: Background | undefined): void;
@@ -123,6 +125,7 @@ const OPENING_DEFAULTS: Record<OpeningType, Pick<Opening, 'width' | 'height' | '
   window: { width: 120, height: 140, sill: 95 },
   arch: { width: 90, height: 220, sill: 0 },
   sliding: { width: 152, height: 205, sill: 0 },
+  garage: { width: 250, height: 215, sill: 0 },
 };
 
 export const useStore = create<State>()(
@@ -196,6 +199,7 @@ export const useStore = create<State>()(
           return id;
         },
         updateWall: (id, patch) => mutate((p) => p.walls[id] && (p.walls[id] = { ...p.walls[id], ...patch })),
+        setAllWallsColor: (color) => mutate((p) => Object.values(p.walls).forEach((w) => (p.walls[w.id] = { ...w, color }))),
         setWallLength: (id, L) =>
           mutate((p) => {
             if (!p.walls[id]) return;
@@ -322,11 +326,12 @@ export const useStore = create<State>()(
           set({ selection: null });
         },
 
-        setLabel: (at, name, existingId, floorColor) =>
+        setLabel: (at, name, existingId, floorColor, outdoor) =>
           mutate((p) => {
             const id = existingId ?? uid();
             const prev: RoomLabel | undefined = p.labels[id];
-            p.labels[id] = { id, x: prev?.x ?? at.x, y: prev?.y ?? at.y, name, floorColor: floorColor ?? prev?.floorColor };
+            const out = outdoor ?? prev?.outdoor;
+            p.labels[id] = { id, x: prev?.x ?? at.x, y: prev?.y ?? at.y, name, floorColor: floorColor ?? prev?.floorColor, ...(out ? { outdoor: true } : {}) };
           }),
         deleteLabel: (id) => mutate((p) => delete p.labels[id]),
 

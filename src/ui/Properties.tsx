@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { CAMERA_COLORS, coverageStats, useCoverage, type CoverageStats } from '../model/coverage';
 import type { Room } from '../model/geom';
 import { listBackups, type Backup } from '../model/persist';
-import { CATALOG_BY_ID, POCKET_OPEN_DEFAULT, pocketItemSize, pocketSize } from '../catalog/catalog';
-import { animateOpen, DOOR_OPEN_DEFAULT, setOpen, stopOpen, type OpenRef } from '../model/pocketAnim';
+import { CATALOG_BY_ID, colorSlots, POCKET_OPEN_DEFAULT, pocketItemSize, pocketSize } from '../catalog/catalog';
+import { ColorPicker, FLOOR_COLORS, FURNITURE_COLORS, WALL_COLORS } from './ColorPicker';
+import { animateOpen, DOOR_OPEN_DEFAULT, openingOpen, setOpen, stopOpen, type OpenRef } from '../model/pocketAnim';
 import { BINARY_SENSORS, type Item } from '../model/types';
 import { focusedRoom, focusOnRoom, useDerived } from '../model/derived';
 import { dist } from '../model/geom';
@@ -56,11 +57,11 @@ function PocketDoorProps({ it }: { it: Item }) {
 }
 
 /** simulazione apertura/chiusura: cursore + Apri/Chiudi animati (porte a scomparsa e porte normali) */
-function OpenControls({ r, open, door }: { r: OpenRef; open: number; door?: boolean }) {
+function OpenControls({ r, open, door, garage }: { r: OpenRef; open: number; door?: boolean; garage?: boolean }) {
   const st = useStore.getState();
   return (
     <>
-      <label className="prop" data-tip={door ? "Trascina per girare l'anta (100% = aperta a 90°)" : 'Trascina per aprire o chiudere le ante'}>
+      <label className="prop" data-tip={door ? "Trascina per girare l'anta (100% = aperta a 90°)" : garage ? 'Trascina per alzare o abbassare il portone' : 'Trascina per aprire o chiudere le ante'}>
         <span>Apertura</span>
         <input
           type="range"
@@ -77,8 +78,8 @@ function OpenControls({ r, open, door }: { r: OpenRef; open: number; door?: bool
         <em>{door ? `${Math.round(open * 90)}°` : `${Math.round(open * 100)}%`}</em>
       </label>
       <div className="row">
-        <button onClick={() => animateOpen(r, 1)} data-tip={door ? "L'anta gira fino a 90°" : 'Le ante scorrono dentro al muro'}>Apri</button>
-        <button onClick={() => animateOpen(r, 0)} data-tip={door ? "L'anta si chiude nel vano" : 'Le ante escono e si chiudono al centro'}>Chiudi</button>
+        <button onClick={() => animateOpen(r, 1)} data-tip={door ? "L'anta gira fino a 90°" : garage ? 'Il portone sale e rientra sotto il soffitto' : 'Le ante scorrono dentro al muro'}>Apri</button>
+        <button onClick={() => animateOpen(r, 0)} data-tip={door ? "L'anta si chiude nel vano" : garage ? 'Il portone scende e chiude il vano' : 'Le ante escono e si chiudono al centro'}>Chiudi</button>
         <button onClick={() => animateOpen(r)} data-tip="Apri o chiudi (anche con doppio clic sulla porta)">⇆</button>
       </div>
     </>
@@ -130,8 +131,6 @@ function HaSummary() {
   );
 }
 
-const FLOOR_COLORS = ['#d9c2a0', '#b98b5e', '#8c6a4f', '#e8e2d6', '#c9c9c9', '#9aa5ad', '#e6d3b3', '#a3b18a'];
-const WALL_COLORS = ['#f4f1ec', '#ffffff', '#e9e1d3', '#d8e2dc', '#cfd8e3', '#f2d7c9', '#b7c4cf', '#8a9a5b'];
 
 export function Properties() {
   const sel = useStore((s) => s.selection);
@@ -248,11 +247,11 @@ export function Properties() {
         )}
         <Num label="Spessore" value={w.thickness} onChange={(v) => st.updateWall(w.id, { thickness: Math.max(2, v) })} />
         <Num label="Altezza" value={w.height} onChange={(v) => st.updateWall(w.id, { height: Math.max(10, v) })} />
-        <div className="swatches">
-          {WALL_COLORS.map((c) => (
-            <button key={c} style={{ background: c }} className={w.color === c ? 'on' : ''} onClick={() => st.updateWall(w.id, { color: c })} data-tip="Colore della parete" />
-          ))}
-        </div>
+        <span className="muted small">Colore della parete</span>
+        <ColorPicker value={w.color ?? '#f4f1ec'} colors={WALL_COLORS} onChange={(c) => st.updateWall(w.id, { color: c })} />
+        <button onClick={() => st.setAllWallsColor(w.color ?? '#f4f1ec')} data-tip="Dà questo colore a tutti i muri della casa">
+          Stesso colore a tutti i muri
+        </button>
         <WallOpenings wallId={w.id} />
         <button className="danger" onClick={() => st.deleteWall(w.id)} data-tip="Elimina il muro: le stanze ai due lati diventano una sola (si può annullare con ⌘Z)">
           🔨 Abbatti muro
@@ -265,7 +264,7 @@ export function Properties() {
   if (sel.kind === 'opening') {
     const o = project.openings[sel.id];
     if (!o) return null;
-    const names = { door: 'Porta', window: o.sill === 0 ? 'Portafinestra' : 'Finestra', arch: 'Varco', sliding: 'Ante scorrevoli (SKYTTA)' };
+    const names = { door: 'Porta', window: o.sill === 0 ? 'Portafinestra' : 'Finestra', arch: 'Varco', sliding: 'Ante scorrevoli (SKYTTA)', garage: 'Portone del garage' };
     const wl = project.walls[o.wallId];
     const wallLen = wl ? dist(project.nodes[wl.a], project.nodes[wl.b]) : 0;
     return (
@@ -277,11 +276,12 @@ export function Properties() {
             value={o.type}
             onChange={(e) => {
               const t = e.target.value as typeof o.type;
-              st.updateOpening(o.id, { type: t, ...(t === 'window' ? { sill: o.sill || 95, height: 140 } : t === 'sliding' ? { sill: 0, height: 205 } : { sill: 0, height: Math.max(o.height, 210) }) });
+              st.updateOpening(o.id, { type: t, ...(t === 'window' ? { sill: o.sill || 95, height: 140 } : t === 'sliding' ? { sill: 0, height: 205 } : t === 'garage' ? { sill: 0, height: 215, width: Math.max(o.width, 240) } : { sill: 0, height: Math.max(o.height, 210) }) });
             }}
           >
             <option value="door">Porta</option>
             <option value="sliding">Ante scorrevoli (SKYTTA)</option>
+            <option value="garage">Portone del garage</option>
             <option value="window">Finestra</option>
             <option value="arch">Varco</option>
           </select>
@@ -289,6 +289,31 @@ export function Properties() {
         <Num label="Larghezza" value={o.width} onChange={(v) => st.updateOpening(o.id, { width: Math.max(20, v) })} />
         <Num label="Altezza" value={o.height} onChange={(v) => st.updateOpening(o.id, { height: Math.max(20, v) })} />
         {o.type === 'door' && <OpenControls r={{ kind: 'opening', id: o.id }} open={o.open ?? DOOR_OPEN_DEFAULT} door />}
+        {o.type === 'garage' && (
+          <>
+            <span className="muted small">Misure comuni</span>
+            <div className="row presets">
+              {[
+                [240, 200],
+                [250, 215],
+                [300, 225],
+                [500, 225],
+              ].map(([wd, hh]) => (
+                <button key={wd} className={Math.round(o.width) === wd && Math.round(o.height) === hh ? 'on' : ''} disabled={wd > wallLen + 0.5} onClick={() => st.updateOpening(o.id, { width: wd, height: hh, offset: Math.max(wd / 2, Math.min(wallLen - wd / 2, o.offset)) })}>
+                  {wd}×{hh}
+                </button>
+              ))}
+            </div>
+            <OpenControls r={{ kind: 'opening', id: o.id }} open={openingOpen(o)} garage />
+            <span className="muted small">Colore</span>
+            <ColorPicker value={o.color ?? '#e9eaec'} colors={FURNITURE_COLORS} onChange={(c) => st.updateOpening(o.id, { color: c })} />
+            <div className="row">
+              <button onClick={() => st.updateOpening(o.id, { flipSide: !o.flipSide })} data-tip="Il portone rientra verso l'altro lato del muro (deve andare dentro al garage)">
+                ⇅ Lato interno
+              </button>
+            </div>
+          </>
+        )}
         {o.type === 'window' && <Num label="Davanzale" value={o.sill} onChange={(v) => st.updateOpening(o.id, { sill: Math.max(0, v) })} />}
         <Num tip="Distanza del centro dell'apertura dall'inizio del muro, in cm" label="Posizione" value={o.offset} onChange={(v) => st.updateOpening(o.id, { offset: v })} />
         {o.type !== 'arch' && (
@@ -365,16 +390,17 @@ export function Properties() {
           </>
         )}
         <Num label="Rotazione" unit="°" value={Math.round(((((it.rotation * 180) / Math.PI) % 360) + 360) % 360)} onChange={(v) => st.updateItem(it.id, { rotation: (v * Math.PI) / 180 })} />
-        {cat?.color && (
-          <label className="prop">
-            <span>Colore</span>
-            <input type="color" value={it.color ?? cat.color} onChange={(e) => st.updateItem(it.id, { color: e.target.value })} />
-          </label>
-        )}
+        {cat &&
+          colorSlots(cat).map((base, i) => (
+            <div key={i} className="color-slot">
+              <span className="muted small">{i === 0 ? 'Colore' : 'Secondo colore'}</span>
+              <ColorPicker value={(i === 0 ? it.color : it.color2) ?? base} colors={FURNITURE_COLORS} onChange={(c) => st.updateItem(it.id, i === 0 ? { color: c } : { color2: c })} />
+            </div>
+          ))}
         <div className="row">
           <button onClick={() => st.updateItem(it.id, { rotation: it.rotation + Math.PI / 2 })} data-tip="Ruota di 90° (tasto R; Shift+R per 15°)">⟳ 90°</button>
           <button onClick={() => st.duplicateItem(it.id)} data-tip="Crea una copia accanto (⌘D)">Duplica</button>
-          <button onClick={() => st.updateItem(it.id, { w: cat.w, d: cat.d, h: cat.h, color: undefined, open: undefined })} data-tip="Torna alle misure e al colore originali">Ripristina</button>
+          <button onClick={() => st.updateItem(it.id, { w: cat.w, d: cat.d, h: cat.h, color: undefined, color2: undefined, open: undefined })} data-tip="Torna alle misure e ai colori originali">Ripristina</button>
         </div>
         <button className="danger" onClick={() => st.deleteItem(it.id)}>
           Elimina
@@ -402,12 +428,15 @@ export function Properties() {
         <p>
           Superficie netta: <b>{(r.area / 10000).toFixed(2).replace('.', ',')} m²</b>
         </p>
-        <span className="muted small">Pavimento</span>
-        <div className="swatches">
-          {FLOOR_COLORS.map((c) => (
-            <button key={c} style={{ background: c }} className={lab?.floorColor === c ? 'on' : ''} onClick={() => st.setLabel(pos, lab?.name ?? '', lab?.id, c)} data-tip="Colore del pavimento" />
-          ))}
-        </div>
+        <label className="check" data-tip="Cortile, giardino o spazio tra casa e garage chiuso da muri o recinzioni: non viene messo il pavimento">
+          <input type="checkbox" checked={!!lab?.outdoor} onChange={(e) => st.setLabel(pos, lab?.name ?? '', lab?.id, undefined, e.target.checked)} /> Spazio esterno (senza pavimento)
+        </label>
+        {!lab?.outdoor && (
+          <>
+            <span className="muted small">Pavimento</span>
+            <ColorPicker value={lab?.floorColor ?? '#d9c2a0'} colors={FLOOR_COLORS} onChange={(c) => st.setLabel(pos, lab?.name ?? '', lab?.id, c)} />
+          </>
+        )}
       </aside>
     );
   }
@@ -454,7 +483,7 @@ export function Properties() {
         </div>
         <p className="muted small">
           La vista è fermata da muri, finestre e mobili alti (armadi, frigo…). Porte e varchi sono considerati aperti.
-          {!useStore.getState().showCoverage && ' La copertura è nascosta: attivala con 📹 Copertura in alto.'}
+          {!useStore.getState().showCoverage && ' La copertura è nascosta: attivala dal menu Vista → Zone viste dalle telecamere.'}
         </p>
         <button className="danger" onClick={() => st.deleteCamera(c.id)}>
           Elimina
@@ -649,7 +678,7 @@ function Backups() {
   );
 }
 
-const OPENING_NAMES = { door: 'Porta', window: 'Finestra', arch: 'Varco', sliding: 'Ante scorrevoli' } as const;
+const OPENING_NAMES = { door: 'Porta', window: 'Finestra', arch: 'Varco', sliding: 'Ante scorrevoli', garage: 'Portone garage' } as const;
 
 /** porte e finestre del muro selezionato: selezionabili ed eliminabili anche se sovrapposte */
 function WallOpenings({ wallId }: { wallId: string }) {

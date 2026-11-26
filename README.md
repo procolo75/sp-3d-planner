@@ -48,7 +48,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 - **Una stanza alla volta**: pianta e 3D mostrano solo la stanza che stai arredando, da vicino.
 - **3D**: vista d'insieme, vista dall'alto, muri bassi, ombre e **passeggiata** in prima persona.
 - **Telecamere**: metti le telecamere di sorveglianza, scegli angolo di visione e portata e vedi **le zone coperte** e quanta parte di ogni stanza è sorvegliata.
-- **Mappa per Home Assistant**: metti luci e sensori, collega porte, finestre e telecamere alle entità di Home Assistant e scarica la mappa interattiva per la card **ha-floorplan** (3D dall'alto, isometrica, prospettica o pianta 2D), con le stanze che si illuminano quando accendi la luce.
+- **Mappa per Home Assistant**: metti luci e sensori, collega porte, finestre e telecamere alle entità di Home Assistant e scarica la mappa interattiva per la card **[ha-floorplan](https://experiencelovelace.github.io/ha-floorplan/)** (3D dall'alto, isometrica, prospettica o pianta 2D), con le stanze che si illuminano quando accendi la luce.
 - **🔒 Blocca**: tocchi e selezioni senza spostare nulla per sbaglio (comodo col pennino o sul tablet).
 - **Salvataggio su PC** in un file, apertura da PC, progetti recenti e versioni precedenti automatiche.
 
@@ -94,7 +94,7 @@ Scegli **Disegno a mano**: parti da un foglio vuoto con lo strumento **Muro** gi
 | Vedere tutta la pianta | pulsante **⤢** in basso a destra |
 | Selezionare | strumento **↖ Seleziona** (tasto **V**), poi clic su muro, porta, mobile o stanza |
 | Non spostare niente per sbaglio | pulsante **🔓 Blocca** (diventa **🔒 Bloccato**): il tocco seleziona soltanto e trascinando sposti la vista. Le modifiche dal pannello a destra restano possibili. Clic di nuovo per sbloccare; il browser se lo ricorda |
-| Mostrare/nascondere le misure | pulsante **📐 Quote** in alto a destra |
+| Mostrare/nascondere le misure | menu **Vista → Quote delle stanze** |
 | Pianta, 3D o entrambi | pulsanti **2D**, **2D \| 3D**, **3D** in alto a destra |
 
 Le **quote rosse** dentro ogni stanza sono le misure interne di ogni lato, da angolo ad angolo, senza lo spessore dei muri.
@@ -124,10 +124,14 @@ Seleziona il muro e premi **Canc** (o **🔨 Abbatti muro**). Porte e finestre d
 
 Le stanze si formano da sole quando i muri chiudono uno spazio.
 - **Nome**: clicca la stanza in pianta e scrivi il nome nel pannello a destra, oppure (senza nulla selezionato) usa l'elenco **Stanze** nel pannello: un campo per ogni stanza. Le stanze senza nome mostrano in pianta *+ clicca per dare un nome*.
-- **Pavimento**: con la stanza selezionata scegli il colore del pavimento.
+- **Pavimento**: con la stanza selezionata scegli il colore del pavimento (legni, bianco, marmo, cemento, cotto…).
+- **Pareti**: seleziona un muro e scegline il colore; **Stesso colore a tutti i muri** lo dà a tutta la casa.
+- I colori si scelgono da pastiglie con il nome (passaci sopra il mouse); **+** apre un colore qualsiasi.
+- **Edifici staccati** (es. casa e **garage** separati): il pavimento c'è solo sotto gli edifici, lo spazio in mezzo resta esterno.
+- **Spazio esterno**: un cortile o giardino chiuso da muri o recinzioni diventa una «stanza»; selezionalo e spunta **Spazio esterno (senza pavimento)**: in pianta appare tratteggiato in verde e in 3D non ha pavimento.
 - **Superficie**: la superficie netta è mostrata in pianta e nel pannello; in alto nel pannello c'è il totale della casa.
 
-## 5. Porte, finestre, varchi e ante scorrevoli
+## 5. Porte, finestre, varchi, ante scorrevoli e garage
 
 | Strumento | Cosa inserisce |
 |---|---|
@@ -135,6 +139,7 @@ Le stanze si formano da sole quando i muri chiudono uno spazio.
 | **🪟 Finestra** (tasto **F**) | finestra (120 cm, davanzale 95 cm) |
 | **⌒ Varco** | passaggio senza porta |
 | **⇆ Scorrevole** | ante scorrevoli tipo IKEA **SKYTTA** |
+| **🚘 Garage** | portone del garage basculante/sezionale (250×215 cm) |
 
 **Inserire**: scegli lo strumento e clicca sul muro. Mentre muovi il mouse vedi le **distanze dai muri vicini** (misurate fino al filo del muro, su entrambi i lati).
 
@@ -143,6 +148,8 @@ Le stanze si formano da sole quando i muri chiudono uno spazio.
 **Aprire e chiudere una porta**: con la porta selezionata, il cursore **Apertura** gira l'anta da 0° (chiusa) a 90°; **Apri**, **Chiudi** e **⇆** la fanno girare con un'animazione. Più veloce: **doppio clic sulla porta**, in pianta o in 3D. Una porta chiusa blocca anche la vista delle telecamere.
 
 **Ante scorrevoli (SKYTTA)**: nel pannello trovi le larghezze SKYTTA (102, 152, 202, 252, 302 cm), le altezze (205, 240 cm), la **finitura** (vetro trasparente, vetro satinato, bianco, specchio) e **Tutto il muro**: le ante prendono tutto il muro e lo sostituiscono, come il fronte di una cabina armadio. Per fare una cabina armadio: disegna con **Muro** il fronte, inserisci lo **Scorrevole** e premi *Tutto il muro*.
+
+**Portone del garage**: nel pannello scegli le misure comuni (240×200, 250×215, 300×225, 500×225) o scrivi le tue, il colore e **⇅ Lato interno** (verso dove rientra). **Apertura**, **Apri**, **Chiudi** o il doppio clic lo fanno salire e rientrare sotto il soffitto; aperto per metà o più lascia passare la vista delle telecamere.
 
 ## 6. Mobili
 
@@ -154,8 +161,12 @@ Con il mobile selezionato:
 - **trascinalo** per spostarlo (in pianta o in 3D);
 - **ruotalo** trascinando il pallino blu, oppure **R** (90°) e **Shift+R** (15°);
 - **⌘D** o *Duplica* per una copia accanto;
-- nel pannello cambi **larghezza, profondità, altezza, quota da terra** (es. pensili), **rotazione**, **colore** e un **nome** a tua scelta; *Ripristina* torna alle misure originali;
+- nel pannello cambi **larghezza, profondità, altezza, quota da terra** (es. pensili), **rotazione**, **colore** (tutto il mobile, cuscini compresi; per tavoli, letti e simili anche un **secondo colore**, es. gambe o struttura) e un **nome** a tua scelta; *Ripristina* torna alle misure e ai colori originali;
 - **Canc** lo elimina.
+
+Le **miniature** del catalogo sono piccoli render 3D dei mobili, come appaiono nella vista 3D.
+
+**Riscaldamento e clima**: termosifoni in alluminio (6–12 elementi e verticale), in ghisa, scaldasalviette, split del condizionatore, ventilconvettore, stufa a pellet e caldaia murale. Si appoggiano al muro come gli altri mobili e partono già all'altezza giusta da terra.
 
 **Mobile su misura**: per qualsiasi mobile che non trovi (anche IKEA), premi **➕ Mobile su misura**, scrivi il nome, scegli il tipo (armadio, libreria, cassettiera, mobile con ante, tavolo, divano, letto) e le misure prese dal sito o dal metro, poi **Metti in pianta**.
 
@@ -207,13 +218,15 @@ Pulsanti in alto a destra della vista 3D:
 
 ## 10. Salvare e aprire i progetti
 
-| Pulsante | Cosa fa |
+I comandi sono nel menu **File** in alto (come in un'applicazione); il pulsante **💾 Salva** resta sempre a vista. Gli altri menu: **Modifica** (annulla, ripeti, blocca spostamenti), **Pianta** (correggi scala, pianta sotto e sua trasparenza) e **Vista** (2D, 3D, quote, copertura telecamere).
+
+| Comando | Cosa fa |
 |---|---|
-| **💾 Salva su PC** (⌘S) | salva il progetto **in un file sul tuo computer** (es. `Casa.sp3d.json`). La prima volta scegli cartella e nome; dopo, salva nello stesso file senza chiedere. Il pallino **•** vuol dire che ci sono modifiche non salvate. |
+| **💾 Salva** (⌘S) | salva il progetto **in un file sul tuo computer** (es. `Casa.sp3d.json`). La prima volta scegli cartella e nome; dopo, salva nello stesso file senza chiedere. Il pallino **•** vuol dire che ci sono modifiche non salvate. |
 | **Salva con nome…** (⇧⌘S) | salva in un **nuovo file**: utile per tenere varianti (es. *Casa – cucina aperta*). |
 | **📂 Apri da PC** (⌘O) | apre un progetto salvato sul computer. I salvataggi successivi aggiornano quel file. |
 | **🕘 Recenti** | i progetti usati di recente **in questo browser**, per riaprirli al volo, scaricarli o toglierli dall'elenco. |
-| **✚ Nuovo** | nuovo progetto (da pianta o da zero). |
+| **📄 Nuovo progetto…** | nuovo progetto (da pianta o da zero). |
 
 **Con Chrome ed Edge** scegli tu la cartella e il programma riscrive lo stesso file a ogni salvataggio (dopo aver ricaricato la pagina il browser può chiederti una volta il permesso di modificare il file). **Con Safari e Firefox** il browser non permette di scegliere la cartella: il file finisce nella cartella **Download** e ogni salvataggio ne scarica una copia aggiornata.
 
@@ -231,7 +244,7 @@ Pulsanti in alto a destra della vista 3D:
 3. Per girarla trascina il **pallino** davanti alla telecamera (o premi **R** / **Shift+R** per 15°). Trascinando la telecamera la sposti lungo le pareti.
 4. A destra scegli **angolo di visione** (60°–180°, o 360° per le fisheye da soffitto), **portata** in metri, altezza, colore e nome.
 5. Senza nulla selezionato, il pannello a destra mostra **quanta parte della casa è coperta** e la percentuale **stanza per stanza**: le stanze scoperte sono in rosso.
-6. Il pulsante **📹 Copertura** (in alto, gruppo *Vista*) mostra o nasconde le zone coperte.
+6. Il menu **Vista → Zone viste dalle telecamere** mostra o nasconde le zone coperte.
 
 La vista è fermata da muri, finestre, ante scorrevoli non trasparenti e mobili alti (dai 170 cm in su: armadi, frigo, librerie). Porte e varchi sono considerati **aperti**. La copertura è in pianta (2D): non tiene conto dell'inclinazione verso il basso della telecamera.
 
@@ -250,15 +263,17 @@ Trasforma la casa in una mappa interattiva per la dashboard di [Home Assistant](
 
 L'entità la trovi in Home Assistant in *Impostazioni → Dispositivi e servizi → Entità*. Il riquadro **🏠 Home Assistant** del pannello *Progetto* riassume cosa è collegato.
 
-**Crea la mappa**: premi **🏠 Home Assistant** (in alto, gruppo *File*) e scegli:
-- la **vista**: *3D dall'alto*, *3D isometrica*, *3D prospettica* (con rotazione e inclinazione) o *Pianta 2D* (vettoriale, leggerissima);
-- la dimensione dell'immagine, i **muri bassi** e l'**immagine di giorno** (compare quando il sole è sopra l'orizzonte, entità `sun.sun`);
+**Crea la mappa**: menu **File → Mappa per Home Assistant…** e scegli:
+- la **vista**: *3D dall'alto*, *3D isometrica*, *3D prospettica* o *Pianta 2D* (vettoriale, leggerissima);
+- **da dove guardarla**: nelle viste 3D **trascina la casa** nel riquadro di anteprima finché ti piace (nella vista dall'alto giri la pianta); **↺ Reimposta** torna alla vista di partenza. La mappa usa esattamente quella visuale;
+- il **formato** dell'immagine: *Forma della casa* (lato lungo 1024/1600/2048 px) oppure la misura di uno schermo (Fire HD 10 1920×1200 orizzontale o verticale, Full HD, tablet 2K, iPad…) o **X × Y a scelta** (⇄ scambia orizzontale/verticale): la casa sta al centro e riempie lo schermo;
+- i **muri bassi** e l'**immagine di giorno** (compare quando il sole è sopra l'orizzonte, entità `sun.sun`);
 - il nome della **cartella**.
 
 Premi **✨ Crea mappa**: nelle viste 3D il programma fa un render della casa al buio e **uno per ogni luce accesa**, che contiene solo la luce della lampada e si somma all'immagine sotto, quindi si vede sia di notte sia sull'immagine di giorno (con le ombre dei muri, la luce passa solo da porte e varchi). Nell'anteprima puoi provare: clicca una stanza per accenderne la luce. Poi **⬇ Scarica ZIP**.
 
 **Installa in Home Assistant**
-1. Installa la card **ha-floorplan** da HACS (*Frontend*, cerca «floorplan»).
+1. Installa la card **[ha-floorplan](https://github.com/ExperienceLovelace/ha-floorplan)** da HACS (*Frontend*, cerca «floorplan»). Documentazione: [experiencelovelace.github.io/ha-floorplan](https://experiencelovelace.github.io/ha-floorplan/).
 2. Copia la cartella `floorplan` dello ZIP dentro `/config/www/` (risulta `/config/www/floorplan/<nome>/`).
 3. Dashboard → *Modifica* → *Aggiungi card* → *Manuale*, e incolla il file `<nome>.yaml` (o usa **📋 Copia YAML**).
 

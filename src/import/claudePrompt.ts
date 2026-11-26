@@ -13,7 +13,7 @@ REGOLE PER LE COORDINATE
 PORTE E FINESTRE
 - Nelle piante catastali: una PORTA è indicata da una riga che attraversa il muro (perpendicolare); una FINESTRA da righe parallele al muro dentro il suo spessore.
 - "pos" = punto sulla linea centrale del muro, al centro dell'apertura.
-- Porte verso balcone/terrazzo: tipo "portafinestra". Passaggi senza porta: tipo "varco". Ante scorrevoli (es. cabina armadio): tipo "scorrevole".
+- Porte verso balcone/terrazzo: tipo "portafinestra". Passaggi senza porta: tipo "varco". Ante scorrevoli (es. cabina armadio): tipo "scorrevole". Portone del garage (basculante o sezionale): tipo "garage".
 - Non inventare aperture che non vedi.
 
 STANZE

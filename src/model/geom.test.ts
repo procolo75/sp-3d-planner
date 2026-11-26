@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRooms, computeWallCorners } from './geom';
+import { computeOutlines, computeRooms, computeWallCorners, polygonArea } from './geom';
 import { addNode, addWall, deleteWall, draft, normalize } from './ops';
 import { emptyProject, type Project } from './types';
 
@@ -47,6 +47,31 @@ describe('stanze', () => {
     addWall(p, a, b, 10, 280);
     normalize(p);
     expect(computeRooms(p)).toHaveLength(2);
+  });
+});
+
+describe('contorni degli edifici', () => {
+  it('casa e garage staccati: due contorni, niente in mezzo', () => {
+    const p = draft(emptyProject());
+    rect(p, 0, 0, 800, 600);
+    rect(p, 1200, 0, 1500, 600);
+    const o = computeOutlines(p);
+    expect(o).toHaveLength(2);
+    const areas = o.map((q) => Math.abs(polygonArea(q))).sort((a, b) => a - b);
+    expect(areas[0]).toBeCloseTo(300 * 600, 0);
+    expect(areas[1]).toBeCloseTo(800 * 600, 0);
+    // lo spazio tra i due edifici non è dentro nessun contorno
+    expect(o.every((q) => polygonArea(q) > 0)).toBe(true);
+  });
+
+  it('un muro divisorio non aggiunge contorni', () => {
+    const p = draft(emptyProject());
+    rect(p, 0, 0, 600, 300);
+    const m1 = addNode(p, { x: 300, y: 0 });
+    const m2 = addNode(p, { x: 300, y: 300 });
+    addWall(p, m1, m2, 10, 280);
+    normalize(p);
+    expect(computeOutlines(p)).toHaveLength(1);
   });
 });
 

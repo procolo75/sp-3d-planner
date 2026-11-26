@@ -80,7 +80,9 @@ export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: {
   });
 
   const used = new Set<string>();
-  const areas: LayoutArea[] = der.rooms.map((r, i) => {
+  // gli spazi esterni restano aree solo se hanno una luce (es. luce del giardino)
+  const rooms = der.rooms.filter((r) => !der.roomLabel.get(r.key)?.outdoor || ents.lights.some((l) => pointInPolygon(l, r.poly)));
+  const areas: LayoutArea[] = rooms.map((r, i) => {
     const name = der.roomLabel.get(r.key)?.name || `Stanza ${i + 1}`;
     let id = `area.${slugify(name)}`;
     for (let k = 2; used.has(id); k++) id = `area.${slugify(name)}_${k}`;

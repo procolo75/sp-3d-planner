@@ -2,9 +2,9 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { ContactShadows, OrbitControls, PointerLockControls } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { CATALOG_BY_ID, itemParts } from '../catalog/catalog';
-import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT } from '../model/pocketAnim';
-import { derive, focusedRoom, useDerived } from '../model/derived';
+import { CATALOG_BY_ID, itemParts, shade } from '../catalog/catalog';
+import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT, openingOpen } from '../model/pocketAnim';
+import { derive, focusedRoom, isOutdoor, useDerived } from '../model/derived';
 import { add, labelPoint, mul, norm, perp, pointInPolygon, sub } from '../model/geom';
 import { degree } from '../model/ops';
 import { useStore } from '../model/store';
@@ -12,6 +12,7 @@ import type { Camera, Item, Opening, Project } from '../model/types';
 import { useCoverage } from '../model/coverage';
 import { magnetToWall } from '../editor2d/snapping';
 import { buildFloorGeometry, buildWallGeometry, S } from './wallGeometry';
+import { partGeometry, partLook } from './partMeshes';
 import { pocketOpenings } from '../model/pocketDoors';
 
 export function Scene3D() {
@@ -348,27 +349,30 @@ export function World({ cutaway, interactive, exportMode }: { cutaway: boolean; 
   }, [project, der, cutaway, focusWalls]);
   useEffect(() => () => wallGeos.forEach((g) => g.geo.dispose()), [wallGeos]);
 
-  const floors = useMemo(
-    () =>
-      der.rooms.filter((r) => !fr || r.key === fr.key).map((r) => ({
+  const floors = useMemo(() => {
+    const inside = (inner: { x: number; y: number }[], outer: { x: number; y: number }[]) => inner !== outer && inner.every((q) => pointInPolygon(q, outer));
+    return der.rooms
+      .filter((r) => (!fr || r.key === fr.key) && !isOutdoor(der, r.key))
+      .map((r) => ({
         key: r.key,
         // 8 mm sopra il pavimento generale: abbastanza per evitare lo sfarfallio (z-fighting)
-        geo: buildFloorGeometry(r.poly, 0.008),
+        // gli edifici dentro la stanza (es. casa dentro un recinto) restano fuori dal suo pavimento
+        geo: buildFloorGeometry(r.poly, 0.008, der.outlines.filter((o) => inside(o, r.poly))),
         color: der.roomLabel.get(r.key)?.floorColor ?? '#d9c2a0',
-      })),
-    [der, fr],
-  );
+      }));
+  }, [der, fr]);
   useEffect(() => () => floors.forEach((f) => f.geo.dispose()), [floors]);
 
-  // pavimento continuo sotto tutta la casa (anche dove le stanze non sono ancora chiuse)
-  const base = useMemo(() => {
-    const ns = Object.values(project.nodes);
-    if (ns.length < 2) return null;
-    const xs = ns.map((n) => n.x);
-    const ys = ns.map((n) => n.y);
-    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    return { cx: ((x0 + x1) / 2) * S, cz: ((y0 + y1) / 2) * S, w: (x1 - x0) * S, d: (y1 - y0) * S };
-  }, [project.nodes]);
+  // pavimento continuo sotto ogni edificio (anche dove le stanze non sono ancora chiuse), seguendone il
+  // contorno: tra casa e garage staccati resta l'esterno. Un recinto con un cortile «esterno» non ne ha.
+  const bases = useMemo(() => {
+    if (fr) return [];
+    const outdoor = der.rooms.filter((r) => isOutdoor(der, r.key));
+    return der.outlines
+      .filter((o) => !outdoor.some((r) => pointInPolygon(der.roomLabelPos.get(r.key)!, o)))
+      .map((o) => buildFloorGeometry(o, 0));
+  }, [der, fr]);
+  useEffect(() => () => bases.forEach((g) => g.dispose()), [bases]);
 
   return (
     <group>
@@ -378,12 +382,11 @@ export function World({ cutaway, interactive, exportMode }: { cutaway: boolean; 
           <meshStandardMaterial color="#e3e6ea" polygonOffset polygonOffsetFactor={4} polygonOffsetUnits={4} />
         </mesh>
       )}
-      {base && !fr && (
-        <mesh rotation-x={-Math.PI / 2} position={[base.cx, 0, base.cz]} receiveShadow>
-          <planeGeometry args={[base.w, base.d]} />
-          <meshStandardMaterial color="#d6c3a3" roughness={0.85} polygonOffset polygonOffsetFactor={2} polygonOffsetUnits={2} />
+      {bases.map((g, i) => (
+        <mesh key={'base' + i} geometry={g} receiveShadow>
+          <meshStandardMaterial color="#d6c3a3" roughness={0.85} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={2} polygonOffsetUnits={2} />
         </mesh>
-      )}
+      ))}
       {floors.map((f) => (
         <mesh key={f.key} geometry={f.geo} receiveShadow onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'room', id: f.key })) : undefined}>
           <meshStandardMaterial color={f.color} side={THREE.DoubleSide} roughness={0.8} />
@@ -451,7 +454,7 @@ export function World({ cutaway, interactive, exportMode }: { cutaway: boolean; 
 /** copia del progetto con porte a battente e porte a scomparsa chiuse */
 function closeAllDoors(p: Project): Project {
   const openings = { ...p.openings };
-  for (const o of Object.values(openings)) if (o.type === 'door') openings[o.id] = { ...o, open: 0 };
+  for (const o of Object.values(openings)) if (o.type === 'door' || o.type === 'garage') openings[o.id] = { ...o, open: 0 };
   const items = { ...p.items };
   for (const it of Object.values(items)) if (CATALOG_BY_ID[it.catalogId]?.pocket) items[it.id] = { ...it, open: 0 };
   return { ...p, openings, items };
@@ -526,6 +529,71 @@ function Opening3D({ p, o, cutaway, isSel }: { p: Project; o: Opening; cutaway: 
             <boxGeometry args={[o.width * S, 0.03, Math.max(0.05, (w.thickness - 2) * S)]} />
             <meshStandardMaterial color="#b8bcc0" metalness={0.4} roughness={0.4} />
           </mesh>
+        )}
+      </group>
+    );
+  }
+  if (o.type === 'garage') {
+    // portone sezionale: pannelli orizzontali sul filo interno del muro; aprendo sale e rientra
+    // in orizzontale sotto il soffitto, verso l'interno (lato scelto con «Verso»)
+    const side = o.flipSide ? -1 : 1;
+    const open = Math.max(0, Math.min(1, openingOpen(o)));
+    const H = o.height;
+    const nP = Math.max(3, Math.round(H / 52));
+    const ph = H / nP;
+    const face = side * Math.max(0, w.thickness / 2 - 1.5);
+    const col = isSel ? '#7fb2f0' : o.color ?? '#e9eaec';
+    const groove = shade(col, -0.12);
+    const lift = open * H;
+    // ogni pannello: dove sta lungo il percorso (verticale nel vano poi orizzontale sotto il soffitto)
+    const panels = Array.from({ length: nP }, (_, i) => {
+      // distanza del centro del pannello dal bordo superiore del vano, lungo il percorso
+      const sPath = (nP - 1 - i + 0.5) * ph - lift;
+      if (sPath >= 0) return { y: H - sPath, z: face, vertical: true };
+      return { y: H + 2, z: face + side * -sPath, vertical: false };
+    });
+    const visibleH = cutaway ? 110 : Infinity;
+    return (
+      <group position={[c.x * S, 0, c.y * S]} rotation-y={ang} onDoubleClick={(e) => (e.stopPropagation(), animateDoor(o.id))}>
+        {panels.map((pp, i) =>
+          pp.y - ph / 2 > visibleH ? null : (
+            <group key={i} position={[0, pp.y * S, pp.z * S]} rotation-x={pp.vertical ? 0 : Math.PI / 2}>
+              <mesh castShadow>
+                <boxGeometry args={[(o.width - 2) * S, (ph - 0.6) * S, 0.035]} />
+                <meshStandardMaterial color={col} roughness={0.55} metalness={0.15} />
+              </mesh>
+              {[-0.25, 0.25].map((k) => (
+                <mesh key={k} position={[0, k * ph * S, 0.019 * -side]}>
+                  <boxGeometry args={[(o.width - 6) * S, 0.012, 0.004]} />
+                  <meshStandardMaterial color={groove} roughness={0.7} />
+                </mesh>
+              ))}
+            </group>
+          ),
+        )}
+        {!cutaway && (
+          <>
+            {/* guide laterali verticali e a soffitto */}
+            {[-1, 1].map((k) => (
+              <group key={k}>
+                <mesh position={[(k * (o.width / 2 - 1)) * S, (H / 2) * S, (face + side * 3) * S]}>
+                  <boxGeometry args={[0.03, H * S, 0.05]} />
+                  <meshStandardMaterial color="#9aa0a6" metalness={0.5} roughness={0.4} />
+                </mesh>
+                <mesh position={[(k * (o.width / 2 - 1)) * S, (H + 4) * S, (face + side * (H / 2)) * S]}>
+                  <boxGeometry args={[0.03, 0.05, H * S]} />
+                  <meshStandardMaterial color="#9aa0a6" metalness={0.5} roughness={0.4} />
+                </mesh>
+              </group>
+            ))}
+            {/* maniglia */}
+            {open < 0.1 && (
+              <mesh position={[0, 0.25, (face - side * 2) * S]}>
+                <boxGeometry args={[0.2, 0.03, 0.03]} />
+                <meshStandardMaterial color="#3b3f45" metalness={0.6} roughness={0.3} />
+              </mesh>
+            )}
+          </>
         )}
       </group>
     );
@@ -605,7 +673,7 @@ const tmpPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 function Item3D({ it, selected, interactive = true }: { it: Item; selected: boolean; interactive?: boolean }) {
   const cat = CATALOG_BY_ID[it.catalogId];
-  const parts = useMemo(() => (cat ? itemParts(cat, { w: it.w, d: it.d, h: it.h, color: it.color, open: it.open }) : []), [cat, it.w, it.d, it.h, it.color, it.open]);
+  const parts = useMemo(() => (cat ? itemParts(cat, { w: it.w, d: it.d, h: it.h, color: it.color, color2: it.color2, open: it.open }) : []), [cat, it.w, it.d, it.h, it.color, it.color2, it.open]);
   const drag = useRef<{ off: THREE.Vector3 } | null>(null);
   const controls = useThree((s) => s.controls) as any;
   if (!cat) return null;
@@ -648,30 +716,11 @@ function Item3D({ it, selected, interactive = true }: { it: Item; selected: bool
 
   return (
     <group position={[it.x * S, it.z * S, it.y * S]} rotation-y={-it.rotation} onDoubleClick={interactive && cat.pocket ? (e) => (e.stopPropagation(), animatePocket(it.id)) : undefined} onPointerDown={interactive ? onDown : undefined} onPointerMove={interactive ? onMove : undefined} onPointerUp={interactive ? onUp : undefined}>
-      {parts.map((pt, i) => {
-        const pos: [number, number, number] = [pt.p[0] * S, pt.p[1] * S, pt.p[2] * S];
-        const mat = <meshStandardMaterial color={pt.c} transparent={pt.o !== undefined} opacity={pt.o ?? 1} roughness={0.7} />;
-        if (pt.t === 'box')
-          return (
-            <mesh key={i} position={pos} castShadow receiveShadow>
-              <boxGeometry args={[pt.s[0] * S, pt.s[1] * S, pt.s[2] * S]} />
-              {mat}
-            </mesh>
-          );
-        if (pt.t === 'cyl')
-          return (
-            <mesh key={i} position={pos} castShadow receiveShadow>
-              <cylinderGeometry args={[pt.r * S, pt.r * S, pt.h * S, 24]} />
-              {mat}
-            </mesh>
-          );
-        return (
-          <mesh key={i} position={pos} castShadow>
-            <sphereGeometry args={[pt.r * S, 16, 12]} />
-            {mat}
-          </mesh>
-        );
-      })}
+      {parts.map((pt, i) => (
+        <mesh key={i} position={[pt.p[0] * S, pt.p[1] * S, pt.p[2] * S]} geometry={partGeometry(pt)} castShadow receiveShadow={pt.t !== 'sph'}>
+          <meshStandardMaterial color={pt.c} transparent={pt.o !== undefined} opacity={pt.o ?? 1} {...partLook(pt)} />
+        </mesh>
+      ))}
       {selected && (
         <mesh position={[0, (it.h / 2) * S, 0]}>
           <boxGeometry args={[it.w * S + 0.02, it.h * S + 0.02, it.d * S + 0.02]} />

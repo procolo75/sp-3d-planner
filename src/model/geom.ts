@@ -217,18 +217,18 @@ export interface Room {
   area: number;
 }
 
-export function computeRooms(p: Project): Room[] {
+/** facce del grafo dei muri (senza rami morti): cicli di nodi con la loro area con segno */
+function planarFaces(p: Project): { cycle: ID[]; poly: V[]; area: number; wallBetween: Map<string, Wall> }[] {
   // grafo senza "rami morti" (nodi di grado 1)
   const adj = new Map<ID, Set<ID>>();
   const wallBetween = new Map<string, Wall>();
-  const ek = (a: ID, b: ID) => (a < b ? a + '|' + b : b + '|' + a);
   for (const w of Object.values(p.walls)) {
     if (w.a === w.b || !p.nodes[w.a] || !p.nodes[w.b]) continue;
     if (!adj.has(w.a)) adj.set(w.a, new Set());
     if (!adj.has(w.b)) adj.set(w.b, new Set());
     adj.get(w.a)!.add(w.b);
     adj.get(w.b)!.add(w.a);
-    wallBetween.set(ek(w.a, w.b), w);
+    wallBetween.set(edgeKey(w.a, w.b), w);
   }
   let changed = true;
   while (changed) {
@@ -256,7 +256,7 @@ export function computeRooms(p: Project): Room[] {
   }
 
   const visited = new Set<string>();
-  const rooms: Room[] = [];
+  const faces: { cycle: ID[]; poly: V[]; area: number; wallBetween: Map<string, Wall> }[] = [];
   for (const [u, nbrs] of sorted) {
     for (const v0 of nbrs) {
       if (visited.has(u + '>' + v0)) continue;
@@ -275,16 +275,35 @@ export function computeRooms(p: Project): Room[] {
       }
       if (cycle.length < 3) continue;
       const poly = cycle.map((id) => ({ x: p.nodes[id].x, y: p.nodes[id].y }));
-      const A = polygonArea(poly);
-      // con y verso il basso e questa regola di percorrenza, le facce interne hanno area positiva
-      if (A <= 1) continue;
-      const thick = cycle.map((id, i) => wallBetween.get(ek(id, cycle[(i + 1) % cycle.length]))?.thickness ?? 10);
-      const inner = offsetPolygonInward(poly, thick.map((t) => t / 2));
-      const area = Math.abs(polygonArea(inner));
-      rooms.push({ key: [...cycle].sort().join(','), nodeIds: cycle, poly, inner, area });
+      faces.push({ cycle, poly, area: polygonArea(poly), wallBetween });
     }
   }
+  return faces;
+}
+
+const edgeKey = (a: ID, b: ID) => (a < b ? a + '|' + b : b + '|' + a);
+
+export function computeRooms(p: Project): Room[] {
+  const rooms: Room[] = [];
+  for (const { cycle, poly, area: A, wallBetween } of planarFaces(p)) {
+    // con y verso il basso e questa regola di percorrenza, le facce interne hanno area positiva
+    if (A <= 1) continue;
+    const thick = cycle.map((id, i) => wallBetween.get(edgeKey(id, cycle[(i + 1) % cycle.length]))?.thickness ?? 10);
+    const inner = offsetPolygonInward(poly, thick.map((t) => t / 2));
+    const area = Math.abs(polygonArea(inner));
+    rooms.push({ key: [...cycle].sort().join(','), nodeIds: cycle, poly, inner, area });
+  }
   return rooms;
+}
+
+/**
+ * Contorni esterni degli edifici (sulle mezzerie dei muri): uno per ogni gruppo di muri chiusi
+ * staccato dagli altri (es. casa e garage separati). Sono le facce «esterne» del grafo, ad area negativa.
+ */
+export function computeOutlines(p: Project): V[][] {
+  return planarFaces(p)
+    .filter((f) => f.area < -1)
+    .map((f) => [...f.poly].reverse());
 }
 
 /** Sposta ogni lato verso l'interno (poligono con area positiva) della distanza indicata. */

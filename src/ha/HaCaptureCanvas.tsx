@@ -37,7 +37,7 @@ function dataUrlBytes(url: string) {
 const frame = () => new Promise((r) => requestAnimationFrame(() => r(null)));
 
 /** luci di scena: «giorno» come nella vista 3D, «notte» quasi buio */
-function rig(mode: 'day' | 'night' | 'bright') {
+export function rig(mode: 'day' | 'night' | 'bright') {
   const g = new THREE.Group();
   if (mode === 'bright') {
     // luce piena e morbida, nessuna ombra: le facce dei muri si distinguono solo per l'orientamento
