@@ -28,12 +28,12 @@ describe('stili della scena 3D', () => {
     expect(edges(wall)).toBe(0);
   });
 
-  it('plastico: tutto chiaro, i vetri restano trasparenti, niente contorni', () => {
+  it('plastico: tutto chiaro, i vetri restano trasparenti, contorni leggeri', () => {
     const { s, wall, glass } = scene();
     applyStyle(s, 'plastico');
-    expect((wall.material as THREE.MeshStandardMaterial).color.getHexString()).toBe('f2efe9');
+    expect((wall.material as THREE.MeshStandardMaterial).color.getHSL({ h: 0, s: 0, l: 0 }).l).toBeGreaterThan(0.6);
     expect((glass.material as THREE.Material).transparent).toBe(true);
-    expect(edges(wall)).toBe(0);
+    expect(edges(wall)).toBe(1);
   });
 
   it('blueprint: materiali piatti con contorni chiari; per le lampade materiali che reagiscono alla luce', () => {
@@ -55,6 +55,50 @@ describe('stili della scena 3D', () => {
     expect((wall.material as unknown as THREE.MeshToonMaterial).color.getHexString()).toBe('ff0000');
     applyStyle(s, 'normale');
     expect(wall.material).toBe(nuovo);
+  });
+
+  it('cambiando il colore dell\'originale (colore del mobile) lo stile si aggiorna', () => {
+    const { s, wall } = scene();
+    const orig = wall.material as THREE.MeshStandardMaterial;
+    applyStyle(s, 'disegno');
+    orig.color.set('#00ff00');
+    applyStyle(s, 'disegno');
+    expect((wall.material as unknown as THREE.MeshToonMaterial).color.getHexString()).toBe('00ff00');
+  });
+
+  it('se React rimpiazza userData (prop della mesh) l\'originale non si perde', () => {
+    const { s, wall } = scene();
+    const orig = wall.material as THREE.MeshStandardMaterial;
+    wall.userData = { surface: 'furniture' };
+    applyStyle(s, 'plastico');
+    wall.userData = { surface: 'furniture' };
+    applyStyle(s, 'plastico');
+    orig.color.set('#202020');
+    wall.userData = { surface: 'furniture' };
+    applyStyle(s, 'plastico');
+    applyStyle(s, 'normale');
+    expect(wall.material).toBe(orig);
+  });
+
+  it('il riquadro di selezione (wireframe) non diventa un blocco pieno', () => {
+    const s = new THREE.Scene();
+    const sel = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: '#2f7de1', wireframe: true }));
+    s.add(sel);
+    const m = sel.material;
+    applyStyle(s, 'disegno');
+    expect(sel.material).toBe(m);
+    applyStyle(s, 'plastico');
+    expect(sel.material).toBe(m);
+  });
+
+  it('plastico: porte e mobili scuri restano più scuri dei muri', () => {
+    const s = new THREE.Scene();
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: '#f4f1ec' }));
+    const door = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial({ color: '#8b5a2b' }));
+    s.add(wall, door);
+    applyStyle(s, 'plastico');
+    const l = (m: THREE.Mesh) => (m.material as THREE.MeshStandardMaterial).color.getHSL({ h: 0, s: 0, l: 0 }).l;
+    expect(l(wall) - l(door)).toBeGreaterThan(0.15);
   });
 
   it('realistico usa i materiali normali (ci pensa il path tracer)', () => {
