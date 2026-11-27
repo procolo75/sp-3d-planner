@@ -256,6 +256,24 @@ select {
 .scene-ctl > * {
   pointer-events: auto;
 }
+.scene-ctl .scene-style {
+  font: inherit;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.scene-ctl .pt-label {
+  align-self: center;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #000a;
+  color: #fff;
+}
+.scene-ctl .pt-label:empty {
+  display: none;
+}
 .walk-hint {
   position: absolute;
   bottom: 10px;

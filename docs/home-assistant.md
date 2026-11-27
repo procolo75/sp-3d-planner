@@ -26,6 +26,7 @@ Guida per mettere in Home Assistant la mappa creata con SP 3D Planner (card **ha
 7. Apri il menu **File → Mappa per Home Assistant…**:
    - scegli la vista e **trascina la casa** nel riquadro di anteprima per decidere da dove guardarla (nella vista dall'alto giri la pianta);
    - scegli l'**Aspetto**: **☀ Sempre chiara** (consigliato: casa chiara e senza ombre, le luci accese la illuminano) oppure **🌙 Giorno/notte** (chiara di giorno, buia dopo il tramonto, segue `sun.sun`);
+   - scegli lo **Stile**: *Normale*, *Plastico* (modellino chiaro con gli angoli ombreggiati), *Disegno* (contorni neri) o *Blueprint* (progetto tecnico blu). Con Disegno e Blueprint la qualità è sempre «Veloce»;
    - scegli la **Qualità**: **⚡ Veloce** (pochi secondi, bordi lisci e angoli ombreggiati) oppure **✨ Alta** (path tracing: la luce rimbalza davvero, con ombre morbide e lampade realistiche; circa 15-25 secondi per immagine, quindi qualche minuto per casa, stanze e luci);
    - **Una pagina per ogni stanza** (attiva di default): sulla mappa della casa toccando una stanza si apre la sua mappa, ingrandita e con solo i suoi muri. Tenendola premuta si accende/spegne la sua luce.;
    - **Vista stanza** (viste 3D): scegli una stanza dal menu e trascinala nel riquadro per decidere da dove guardarla, con o senza **muri bassi**. Le stanze già sistemate hanno il segno ✓. Le altre usano la rotazione della casa con i muri bassi. Le scelte restano salvate nel browser per quella cartella;

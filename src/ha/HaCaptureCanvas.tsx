@@ -7,6 +7,7 @@ import { derive } from '../model/derived';
 import { pointInPolygon, type Room } from '../model/geom';
 import { captureCamera, type CaptureCamera, type HaView, type ViewOpts } from './views';
 import { pathEngine, rasterEngine, type Engine, type HaQuality } from './renderEngine';
+import type { RenderStyle } from '../three/styles';
 
 export type { HaQuality } from './renderEngine';
 
@@ -24,7 +25,7 @@ export interface CaptureResult extends CaptureCamera {
 export interface CaptureApi {
   /** con `room` rende solo quella stanza (i suoi muri e i suoi mobili), inquadrata da vicino */
   /** `quality`: «fast» render normale ritoccato, «high» path tracing (più lento) */
-  capture(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, lights: Light[], look: HaLook, progress?: (msg: string) => void, room?: Room, quality?: HaQuality): Promise<CaptureResult>;
+  capture(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, lights: Light[], look: HaLook, progress?: (msg: string) => void, room?: Room, quality?: HaQuality, style?: RenderStyle): Promise<CaptureResult>;
 }
 
 /** «bright»: casa sempre chiara, senza ombre; «daynight»: buia di sera + immagine di giorno che segue sun.sun */
@@ -49,7 +50,7 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
   const scene = useThree((s) => s.scene);
   useEffect(() => {
     onReady({
-      async capture(p, view, o, lights, look, progress, room, quality = 'fast') {
+      async capture(p, view, o, lights, look, progress, room, quality = 'fast', style = 'normale') {
         const cam = captureCamera(p, view, o, room?.poly);
         if (!cam) throw new Error('La casa non ha ancora muri');
         await setFocus({ at: room ? (derive(p).roomLabelPos.get(room.key) ?? room.poly[0]) : null, cutaway: o.cutaway });
@@ -62,10 +63,11 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
         c2.height = cam.height;
         const ctx = c2.getContext('2d', { willReadFrequently: true })!;
         const pixels = () => ctx.getImageData(0, 0, cam.width, cam.height);
-        const high = quality === 'high';
-        const engine: Engine = high ? pathEngine(gl, scene, cam.camera, ctx, 128) : rasterEngine(gl, scene, cam.camera, ctx);
+        // il path tracing ha senso solo con i materiali «veri» (normale, plastico)
+        const high = quality === 'high' && (style === 'normale' || style === 'plastico');
+        const engine: Engine = high ? pathEngine(gl, scene, cam.camera, ctx, 128, style) : rasterEngine(gl, scene, cam.camera, ctx, style);
         /** render con il motore scelto; con il path tracing mostra la percentuale */
-        const shot = async (msg: string, mode: 'night' | 'bright' | 'day', opts: { lamp?: Light; ao?: boolean } = {}) => {
+        const shot = async (msg: string, mode: 'night' | 'bright' | 'day', opts: { lamp?: Light; ao?: boolean; forLights?: boolean } = {}) => {
           progress?.(msg);
           await frame();
           await engine.shot(mode, { ...opts, progress: high ? (pct) => progress?.(`${msg} ${pct}%`) : undefined });
@@ -78,7 +80,7 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
         let basePx = new Uint8ClampedArray(0);
         let baseUrl = '';
         if (needDark) {
-          baseUrl = await shot(look === 'bright' ? 'Riferimento al buio per le luci…' : 'Render della casa di notte…', 'night');
+          baseUrl = await shot(look === 'bright' ? 'Riferimento al buio per le luci…' : 'Render della casa di notte…', 'night', { forLights: true });
           basePx = pixels().data;
         }
         if (look === 'bright') baseUrl = await shot('Render della casa…', 'bright', { ao: true });

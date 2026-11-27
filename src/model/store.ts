@@ -50,6 +50,8 @@ interface State {
   highlightRoom: string | null;
   /** «Arreda questa stanza»: punto (cm) dentro la stanza su cui concentrarsi; null = tutta la casa */
   focus: V | null;
+  /** simulazione nella vista 3D: luci accese (per id). Non fa parte del progetto né dello storico */
+  litLights: Record<string, boolean>;
 
   setTool(t: Tool): void;
   setView(v: State['view']): void;
@@ -162,6 +164,7 @@ export const useStore = create<State>()(
         locked: readLocked(),
         highlightRoom: null,
         focus: null,
+        litLights: {},
 
         setTool: (t) => set({ tool: t, ...(t !== 'place' ? { placeCatalogId: null, placeOverrides: null } : {}) }),
         setView: (v) => set({ view: v }),

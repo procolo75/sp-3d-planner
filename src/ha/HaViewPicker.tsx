@@ -9,6 +9,8 @@ import { World } from '../three/Scene3D';
 import { S } from '../three/wallGeometry';
 import { useStore } from '../model/store';
 import { rig } from './renderEngine';
+import { StyleApplier } from '../three/StyleApplier';
+import type { RenderStyle } from '../three/styles';
 import { anglesFrom, type HaView } from './views';
 
 export interface PickerProps {
@@ -23,6 +25,8 @@ export interface PickerProps {
   onChange: (a: { azimuth: number; elevation: number }) => void;
   /** una sola stanza: il suo poligono (cm) e un punto al suo interno */
   room?: { poly: { x: number; y: number }[]; at: { x: number; y: number } };
+  /** stile di resa (come sarà il render) */
+  style?: RenderStyle;
 }
 
 const MIN_EL = 20;
@@ -108,7 +112,7 @@ export function HaViewPicker(props: PickerProps) {
       style={props.aspect ? (props.aspect >= 1 ? { aspectRatio: String(props.aspect), height: 'auto', maxHeight: 260 } : { aspectRatio: String(props.aspect), width: 'auto', height: 260, alignSelf: 'center' }) : undefined}
       data-tip={props.view === 'top' ? 'Trascina per girare la pianta' : props.room ? 'Trascina per girare la stanza e scegliere da dove guardarla' : 'Trascina per girare la casa e scegliere da dove guardarla'}>
       <Canvas key={props.view === 'persp' ? 'p' : 'o'} frameloop="demand" dpr={[1, 2]} gl={{ logarithmicDepthBuffer: true, antialias: true }} camera={{ fov: props.view === 'persp' ? 35 : 15 }}>
-        <color attach="background" args={['#eef1f5']} />
+        <StyleApplier style={props.style ?? 'normale'} />
         <Rig {...props} />
       </Canvas>
     </div>

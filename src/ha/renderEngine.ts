@@ -8,13 +8,15 @@ import { N8AOPass } from 'n8ao';
 import { GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
 import { S } from '../three/wallGeometry';
 import type { Light } from '../model/types';
+import { applyStyle, type RenderStyle } from '../three/styles';
 
 export type HaQuality = 'fast' | 'high';
 export type RigMode = 'day' | 'night' | 'bright';
 
 export interface Engine {
   /** renderizza la scena con le luci di `mode` (+ la lampada) e mette il risultato, W×H, nel canvas 2D */
-  shot(mode: RigMode, opts?: { lamp?: Light; ao?: boolean; progress?: (pct: number) => void }): Promise<void>;
+  /** `forLights`: render di riferimento per le lampade (stessi materiali dei render delle lampade) */
+  shot(mode: RigMode, opts?: { lamp?: Light; ao?: boolean; forLights?: boolean; progress?: (pct: number) => void }): Promise<void>;
   dispose(): void;
 }
 
@@ -89,32 +91,39 @@ function grab(gl: THREE.WebGLRenderer, out: CanvasRenderingContext2D) {
   out.drawImage(gl.domElement, 0, 0, width, height);
 }
 
+/** ombreggiatura negli angoli (N8AO) + uscita con tone mapping e sRGB, come il render normale */
+export function makeAoComposer(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, w: number, h: number) {
+  const composer = new EffectComposer(gl, new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType }));
+  composer.setPixelRatio(1);
+  composer.setSize(w, h);
+  const pass = new N8AOPass(scene, camera, w, h);
+  // scena in metri: angoli e spigoli scuriti per una ventina di centimetri
+  pass.configuration.aoRadius = 0.35;
+  pass.configuration.distanceFalloff = 1;
+  pass.configuration.intensity = 2.2;
+  pass.configuration.gammaCorrection = false;
+  pass.setQualityMode('High');
+  composer.addPass(pass);
+  composer.addPass(new OutputPass());
+  return composer;
+}
+
 /** render normale: supersampling 2× e, sulle immagini di base, ombreggiatura negli angoli */
-export function rasterEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, out: CanvasRenderingContext2D): Engine {
+export function rasterEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, out: CanvasRenderingContext2D, style: RenderStyle = 'normale'): Engine {
   const { width: W, height: H } = out.canvas;
-  const ss = Math.max(1, Math.min(2, Math.floor(8192 / Math.max(W, H))));
+  // con i contorni (Disegno, Blueprint) niente supersampling: le linee sono larghe 1 px e ridotte sparirebbero
+  const ss = style === 'disegno' || style === 'blueprint' ? 1 : Math.max(1, Math.min(2, Math.floor(8192 / Math.max(W, H))));
   gl.setSize(W * ss, H * ss, false);
   let composer: EffectComposer | null = null;
-  const ao = () => {
-    if (composer) return composer;
-    composer = new EffectComposer(gl, new THREE.WebGLRenderTarget(W * ss, H * ss, { type: THREE.HalfFloatType }));
-    composer.setPixelRatio(1);
-    composer.setSize(W * ss, H * ss);
-    const pass = new N8AOPass(scene, camera, W * ss, H * ss);
-    // scena in metri: angoli e spigoli scuriti per una ventina di centimetri
-    pass.configuration.aoRadius = 0.35;
-    pass.configuration.distanceFalloff = 1;
-    pass.configuration.intensity = 2.2;
-    pass.configuration.gammaCorrection = false;
-    pass.setQualityMode('High');
-    composer.addPass(pass);
-    composer.addPass(new OutputPass());
-    return composer;
-  };
+  const ao = () => (composer ??= makeAoComposer(gl, scene, camera, W * ss, H * ss));
+  const prevBg = scene.background;
+  scene.background = null;
   return {
     async shot(mode, o = {}) {
       const objs = [rig(mode), ...(o.lamp ? [lamp(o.lamp)] : [])];
       for (const x of objs) scene.add(x);
+      // Blueprint: le lampade (e il loro riferimento al buio) hanno bisogno di materiali che reagiscono alla luce
+      applyStyle(scene, style, { lit: !!o.lamp || !!o.forLights });
       gl.shadowMap.needsUpdate = true;
       gl.render(scene, camera);
       grab(gl, out);
@@ -133,12 +142,13 @@ export function rasterEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera
     },
     dispose() {
       composer?.dispose();
+      scene.background = prevBg;
     },
   };
 }
 
 /** cielo uniforme per il path tracer: colore in alto e in basso, con la sua intensità */
-function sky(top: string, bottom: string) {
+export function sky(top: string, bottom: string) {
   const t = new GradientEquirectTexture(64);
   t.topColor.set(top);
   t.bottomColor.set(bottom);
@@ -148,7 +158,28 @@ function sky(top: string, bottom: string) {
 }
 
 /** path tracing: luce globale vera. `samples` campioni per immagine */
-export function pathEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, out: CanvasRenderingContext2D, samples: number): Engine {
+/** cieli del path tracer per giorno, «sempre chiara» e notte (texture da liberare con dispose) */
+export function ptSkies(): Record<RigMode, { tex: GradientEquirectTexture; intensity: number }> {
+  return {
+    bright: { tex: sky('#ffffff', '#d8cfc0'), intensity: 0.78 },
+    day: { tex: sky('#dfeaff', '#c9bba3'), intensity: 0.6 },
+    night: { tex: sky('#8090b8', '#3a3530'), intensity: 0.2 },
+  };
+}
+
+/** luci «vere» per il path tracer: il cielo fa da luce d'ambiente, più un sole/luna direzionale */
+export function ptLights(mode: RigMode) {
+  const g = new THREE.Group();
+  const key = new THREE.DirectionalLight(mode === 'night' ? '#b8c8ff' : '#ffffff', mode === 'day' ? 1.8 : mode === 'bright' ? 0.55 : 0.2);
+  key.position.set(8, 14, 6);
+  g.add(key);
+  return g;
+}
+
+/** con la luce che rimbalza la stessa lampada illumina molto di più che nel render normale */
+export const PT_LAMP_SCALE = 0.3;
+
+export function pathEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, out: CanvasRenderingContext2D, samples: number, style: RenderStyle = 'normale'): Engine {
   const { width: W, height: H } = out.canvas;
   gl.setSize(W, H, false);
   const pt = new WebGLPathTracer(gl);
@@ -164,28 +195,17 @@ export function pathEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: 
   const prevBg = scene.background;
   const prevEnvI = scene.environmentIntensity;
   scene.background = null;
-  const skies: Record<RigMode, { tex: GradientEquirectTexture; intensity: number }> = {
-    bright: { tex: sky('#ffffff', '#d8cfc0'), intensity: 0.78 },
-    day: { tex: sky('#dfeaff', '#c9bba3'), intensity: 0.6 },
-    night: { tex: sky('#8090b8', '#3a3530'), intensity: 0.2 },
-  };
-  /** luci «vere» per il path tracer: il cielo fa da luce d'ambiente, più un sole/luna direzionale */
-  const lights = (mode: RigMode) => {
-    const g = new THREE.Group();
-    const key = new THREE.DirectionalLight(mode === 'night' ? '#b8c8ff' : '#ffffff', mode === 'day' ? 1.8 : mode === 'bright' ? 0.55 : 0.2);
-    key.position.set(8, 14, 6);
-    g.add(key);
-    return g;
-  };
+  const skies = ptSkies();
+  const lights = ptLights;
   let built = false;
   return {
     async shot(mode, o = {}) {
-      // con la luce che rimbalza la stessa lampada illumina molto di più che nel render normale
-      const objs: THREE.Object3D[] = [lights(mode), ...(o.lamp ? [lamp(o.lamp, false, 0.3)] : [])];
+      const objs: THREE.Object3D[] = [lights(mode), ...(o.lamp ? [lamp(o.lamp, false, PT_LAMP_SCALE)] : [])];
       for (const x of objs) scene.add(x);
       scene.environment = skies[mode].tex;
       scene.environmentIntensity = skies[mode].intensity;
       if (!built) {
+        applyStyle(scene, style);
         // la geometria non cambia tra un'immagine e l'altra: il BVH si costruisce una volta sola
         pt.setScene(scene, camera);
         built = true;

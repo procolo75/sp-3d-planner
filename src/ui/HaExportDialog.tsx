@@ -10,6 +10,7 @@ import { buildCss } from '../ha/css';
 import { HaCaptureCanvas, type CaptureApi, type HaLook, type HaQuality } from '../ha/HaCaptureCanvas';
 import { VIEW_NAMES, type HaView } from '../ha/views';
 import { HaViewPicker } from '../ha/HaViewPicker';
+import { STYLE_NAMES, type RenderStyle } from '../three/styles';
 import { notify } from './Notice';
 
 /** formati dell'immagine: «adatta» = forma della casa (lato lungo), gli altri = schermi comuni */
@@ -104,6 +105,9 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
   const [cutaway, setCutaway] = useState(false);
   const [look, setLook] = useState<HaLook>('bright');
   const [quality, setQuality] = useState<HaQuality>('fast');
+  const [style, setStyle] = useState<Exclude<RenderStyle, 'realistico'>>('normale');
+  /** il path tracing ha senso solo con i materiali «veri» */
+  const canHigh = style === 'normale' || style === 'plastico';
   const [slug, setSlug] = useState(() => slugify(project.name || 'casa'));
   /** una pagina per stanza: toccando la stanza sulla mappa della casa si apre la sua */
   const [perRoom, setPerRoom] = useState(true);
@@ -163,14 +167,14 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
       else {
         if (!api.current) throw new Error('la scena 3D non è ancora pronta, riprova tra un attimo');
         const vo = { res, size: fixed ? size : undefined, azimuth: view === 'top' ? topRot : azimuth, elevation, cutaway };
-        const r = await api.current.capture(project, view, vo, ents.lights, look, setBusy, undefined, quality);
+        const r = await api.current.capture(project, view, vo, ents.lights, look, setBusy, undefined, canHigh ? quality : 'fast', style);
         if (rooms)
           for (let i = 0; i < roomList.length; i++) {
             const a = roomList[i];
             const tag = `Stanza ${i + 1}/${roomList.length}: ${a.name} · `;
             const lights = ents.lights.filter((l) => pointInPolygon(l, a.room.poly));
             const rv = roomView(a.slug);
-            opts.rooms!.set(a.slug, await api.current.capture(project, view, { ...vo, azimuth: rv.azimuth, elevation: rv.elevation, cutaway: rv.cutaway }, lights, look, (m) => setBusy(tag + m), a.room, quality));
+            opts.rooms!.set(a.slug, await api.current.capture(project, view, { ...vo, azimuth: rv.azimuth, elevation: rv.elevation, cutaway: rv.cutaway }, lights, look, (m) => setBusy(tag + m), a.room, canHigh ? quality : 'fast', style));
           }
         bundle = buildBundle(project, view, s, r, opts);
       }
@@ -254,6 +258,7 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
               <>
                 {nWalls > 0 && (
                   <HaViewPicker
+                    style={style}
                     view={view}
                     azimuth={view === 'top' ? topRot : azimuth}
                     elevation={elevation}
@@ -332,9 +337,19 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
                     <option value="daynight">🌙 Giorno/notte</option>
                   </select>
                 </label>
+                <label className="prop" data-tip="Normale: colori del progetto. Plastico: modellino tutto chiaro con gli angoli ombreggiati. Disegno: colori piatti e contorni neri. Blueprint: progetto tecnico blu con linee chiare">
+                  <span>Stile</span>
+                  <select value={style} onChange={(e) => setStyle(e.target.value as typeof style)}>
+                    {(['normale', 'plastico', 'disegno', 'blueprint'] as const).map((k) => (
+                      <option key={k} value={k}>
+                        {STYLE_NAMES[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="prop" data-tip="Veloce: render normale con bordi lisci e angoli ombreggiati, pochi secondi. Alta: path tracing, la luce rimbalza davvero (ombre morbide, angoli e lampade realistici), ma ogni immagine richiede da qualche secondo a un minuto">
                   <span>Qualità</span>
-                  <select value={quality} onChange={(e) => setQuality(e.target.value as HaQuality)}>
+                  <select value={canHigh ? quality : 'fast'} disabled={!canHigh} onChange={(e) => setQuality(e.target.value as HaQuality)}>
                     <option value="fast">⚡ Veloce</option>
                     <option value="high">✨ Alta (path tracing, lenta)</option>
                   </select>
@@ -362,6 +377,7 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
                       </select>
                     </label>
                     <HaViewPicker
+                      style={style}
                       view={view}
                       azimuth={roomView(selRoom.slug).azimuth}
                       elevation={roomView(selRoom.slug).elevation}

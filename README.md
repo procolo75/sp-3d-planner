@@ -207,7 +207,15 @@ Pulsanti in alto a destra della vista 3D:
 - **Ombre**: accende/spegne le ombre (la scelta viene ricordata);
 - **⤢ Inquadra**: inquadra tutta la casa (o la stanza che stai arredando);
 - **⬇ Dall'alto**: vista dall'alto, come una pianta;
+- **Stile** (la scelta viene ricordata):
+  - *Normale*: i colori del progetto;
+  - *Plastico*: modellino tutto chiaro, con gli angoli ombreggiati;
+  - *Disegno*: colori piatti e contorni neri;
+  - *Blueprint*: progetto tecnico blu con linee chiare;
+  - *✨ Realistico*: quando ti fermi l'immagine diventa fotorealistica in qualche secondo (luce che rimbalza, ombre morbide); quando giri torna fluida. In alto vedi l'avanzamento (es. ✨ 120/300);
 - **🚶 Passeggiata**: cammini dentro casa.
+
+**Simulazione delle luci**: clicca il pallino giallo di una luce nella vista 3D per accenderla o spegnerla. Basta una luce accesa e la casa passa alla luce serale, così vedi come illumina la stanza. **🌙 Spegni luci** le spegne tutte e torna il giorno. È solo una simulazione: non comanda le luci di Home Assistant. Per modificare una luce (nome, entità, colore) selezionala nella pianta 2D.
 
 ## 9. La passeggiata
 

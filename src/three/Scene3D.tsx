@@ -14,6 +14,9 @@ import { magnetToWall } from '../editor2d/snapping';
 import { buildFloorGeometry, buildWallGeometry, S } from './wallGeometry';
 import { partGeometry, partLook } from './partMeshes';
 import { pocketOpenings } from '../model/pocketDoors';
+import { StyleApplier } from './StyleApplier';
+import { STYLE_NAMES, type RenderStyle } from './styles';
+import { AOEffect, LampLights, PathTraceView, SceneLights } from './RenderEffects';
 
 export function Scene3D() {
   const [walk, setWalk] = useState(false);
@@ -45,6 +48,27 @@ export function Scene3D() {
       return true;
     }
   });
+  const [style, setStyleState] = useState<RenderStyle>(() => {
+    try {
+      const v = localStorage.getItem('planner3d:style') as RenderStyle | null;
+      return v && v in STYLE_NAMES ? v : 'normale';
+    } catch {
+      return 'normale';
+    }
+  });
+  const setStyle = (v: RenderStyle) => {
+    setStyleState(v);
+    try {
+      localStorage.setItem('planner3d:style', v);
+    } catch {
+      /* ignora */
+    }
+  };
+  // simulazione delle luci: con almeno una lampada accesa la casa passa alla luce serale
+  const lights = useStore((s) => s.project.lights);
+  const litLights = useStore((s) => s.litLights);
+  const evening = Object.values(lights ?? {}).some((l) => litLights[l.id]);
+  const ptLabel = useRef<HTMLSpanElement>(null);
   const toggleShadows = () => {
     setShadows((v) => {
       try {
@@ -58,14 +82,12 @@ export function Scene3D() {
   return (
     <div className="scene3d">
       <Canvas shadows gl={{ logarithmicDepthBuffer: true }} camera={{ position: [8, 10, 12], fov: ORBIT_FOV, near: 0.05, far: 500 }} onPointerMissed={() => !walkRef.current && useStore.getState().select(null)}>
-        <color attach="background" args={['#eef1f5']} />
-        <hemisphereLight args={['#ffffff', '#b8a990', 0.7]} />
-        <directionalLight position={[8, 14, 6]} intensity={shadows ? 1.6 : 1.1} castShadow={shadows} shadow-bias={-0.0005} shadow-normalBias={0.02} shadow-mapSize={[2048, 2048]} shadow-camera-left={-20} shadow-camera-right={20} shadow-camera-top={20} shadow-camera-bottom={-20} />
-        <ambientLight intensity={0.35} />
-        <directionalLight position={[-6, 8, -10]} intensity={0.5} />
+        <StyleApplier style={style} />
+        <SceneLights evening={evening} shadows={shadows} />
+        {style === 'realistico' ? <PathTraceView evening={evening} label={ptLabel} /> : <LampLights shadows={shadows} />}
+        {style === 'plastico' && <AOEffect />}
         <World cutaway={cutaway} interactive={!walk} />
-        {shadows && <ContactShadows position={[0, 0.014, 0]} opacity={0.35} scale={60} blur={2} far={3} />}
-        {!shadows && <ambientLight intensity={0.35} />}
+        {shadows && !evening && style !== 'blueprint' && <ContactShadows position={[0, 0.014, 0]} opacity={0.35} scale={60} blur={2} far={3} />}
         {walk ? <Walk onExit={() => setWalk(false)} fov={walkFov} speed={walkSpeed} onFov={changeFov} /> : <Orbit />}
       </Canvas>
       <div className="scene-ctl">
@@ -81,6 +103,19 @@ export function Scene3D() {
         <button onClick={() => window.dispatchEvent(new CustomEvent('planner:fit3d', { detail: 'top' }))} data-tip="Guarda la casa dall'alto, come una pianta">
           ⬇ Dall'alto
         </button>
+        <select className="scene-style" value={style} onChange={(e) => setStyle(e.target.value as RenderStyle)} data-tip="Stile della vista 3D. Realistico: quando ti fermi l'immagine diventa fotorealistica in pochi secondi">
+          {(Object.keys(STYLE_NAMES) as RenderStyle[]).map((k) => (
+            <option key={k} value={k}>
+              {STYLE_NAMES[k]}
+            </option>
+          ))}
+        </select>
+        {style === 'realistico' && <span ref={ptLabel} className="pt-label" />}
+        {evening && (
+          <button className="on" onClick={() => useStore.getState().set('litLights', {})} data-tip="Simulazione luci attiva: clic sui pallini gialli per accendere o spegnere. Questo pulsante le spegne tutte e torna il giorno">
+            🌙 Spegni luci
+          </button>
+        )}
         <button onClick={() => setWalk(true)} data-tip="Cammina dentro casa ad altezza occhi: clicca nella vista, muovi il mouse per guardare, WASD o frecce per camminare, Esc per uscire">
           🚶 Passeggiata
         </button>
@@ -308,6 +343,7 @@ export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: 
   const selection = useStore((s) => (exportMode ? null : s.selection));
   const storeFocus = useStore((s) => (exportMode ? null : s.focus));
   const focus = exportMode ? (focusAt ?? null) : storeFocus;
+  const litLights = useStore((s) => s.litLights);
   const fr = focusedRoom(der, focus);
   const showCoverage = useStore((s) => s.showCoverage && !exportMode);
   const cov = useCoverage(project, der.corners);
@@ -424,9 +460,24 @@ export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: 
         Object.values(project.lights ?? {})
           .filter((l) => !fr || pointInPolygon(l, fr.poly))
           .map((l) => (
-            <mesh key={l.id} position={[l.x * S, l.z * S, l.y * S]} onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'light', id: l.id })) : undefined}>
+            <mesh
+              key={l.id}
+              position={[l.x * S, l.z * S, l.y * S]}
+              userData={{ noStyle: true }}
+              scale={litLights[l.id] ? 1.35 : 1}
+              onClick={
+                interactive
+                  ? (e) => {
+                      // simulazione: il clic accende/spegne (per modificarla si seleziona nella pianta)
+                      e.stopPropagation();
+                      const st = useStore.getState();
+                      st.set('litLights', { ...st.litLights, [l.id]: !st.litLights[l.id] });
+                    }
+                  : undefined
+              }
+            >
               <sphereGeometry args={[0.07, 16, 12]} />
-              <meshBasicMaterial color={selection?.kind === 'light' && selection.id === l.id ? '#7fb2f0' : '#ffd23f'} />
+              <meshBasicMaterial color={selection?.kind === 'light' && selection.id === l.id ? '#7fb2f0' : litLights[l.id] ? '#fff3b0' : '#c9a93a'} />
             </mesh>
           ))}
       {!exportMode &&
