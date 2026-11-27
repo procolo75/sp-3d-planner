@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { CATALOG_BY_ID, itemParts, shade } from '../catalog/catalog';
 import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT, openingOpen } from '../model/pocketAnim';
-import { derive, focusedRoom, isOutdoor, useDerived } from '../model/derived';
+import { derive, focusedRoom, isOutdoor, roomWalls, useDerived } from '../model/derived';
 import { add, labelPoint, mul, norm, perp, pointInPolygon, sub } from '../model/geom';
 import { degree } from '../model/ops';
 import { useStore } from '../model/store';
@@ -300,13 +300,14 @@ function Walk({ onExit, fov, speed, onFov }: { onExit: () => void; fov: number; 
 }
 
 /** La casa in 3D. `exportMode`: per i render della mappa di Home Assistant (niente selezione, copertura, «arreda stanza» né simboli di luci e sensori). */
-export function World({ cutaway, interactive, exportMode }: { cutaway: boolean; interactive: boolean; exportMode?: boolean }) {
+export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: boolean; interactive: boolean; exportMode?: boolean; /** export: stanza da rendere da sola */ focusAt?: { x: number; y: number } | null }) {
   const current = useStore((s) => s.project);
   // render della mappa: porte sempre chiuse, così la luce resta nella sua stanza
   const project = useMemo(() => (exportMode ? closeAllDoors(current) : current), [current, exportMode]);
   const der = useDerived(project);
   const selection = useStore((s) => (exportMode ? null : s.selection));
-  const focus = useStore((s) => (exportMode ? null : s.focus));
+  const storeFocus = useStore((s) => (exportMode ? null : s.focus));
+  const focus = exportMode ? (focusAt ?? null) : storeFocus;
   const fr = focusedRoom(der, focus);
   const showCoverage = useStore((s) => s.showCoverage && !exportMode);
   const cov = useCoverage(project, der.corners);
@@ -319,17 +320,7 @@ export function World({ cutaway, interactive, exportMode }: { cutaway: boolean; 
   }, [showCoverage, cov, project.cameras]);
   useEffect(() => () => covGeos.forEach((g) => g.geo.dispose()), [covGeos]);
   // «arreda questa stanza»: solo i muri che la delimitano
-  const focusWalls = useMemo(() => {
-    if (!fr) return null;
-    const set = new Set<string>();
-    const n = fr.nodeIds.length;
-    for (let i = 0; i < n; i++) {
-      const a = fr.nodeIds[i];
-      const b = fr.nodeIds[(i + 1) % n];
-      for (const w of Object.values(project.walls)) if ((w.a === a && w.b === b) || (w.a === b && w.b === a)) set.add(w.id);
-    }
-    return set;
-  }, [fr, project.walls]);
+  const focusWalls = useMemo(() => (fr ? roomWalls(project, fr) : null), [fr, project]);
 
   const wallGeos = useMemo(() => {
     const byWall = new Map<string, Opening[]>();

@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../model/store';
 import { derive } from '../model/derived';
 import { collectEntities, slugify } from '../ha/entities';
-import { buildBundle, haBase, zipBundle, type BundleFiles } from '../ha/bundle';
+import { buildBundle, haBase, zipBundle, type BundleFiles, type Rendered } from '../ha/bundle';
+import { mapRooms } from '../ha/layout';
+import { dashboardPath } from '../ha/yaml';
+import { pointInPolygon } from '../model/geom';
 import { buildCss } from '../ha/css';
 import { HaCaptureCanvas, type CaptureApi, type HaLook } from '../ha/HaCaptureCanvas';
 import { VIEW_NAMES, type HaView } from '../ha/views';
@@ -45,7 +48,11 @@ const setLight = (id, on) => {
 document.querySelectorAll('#lights > *').forEach((el) => setLight(el.id, false));
 const toggle = (id) => setLight(id, !$(id).classList.contains('light-on'));
 document.querySelectorAll('#light-markers circle').forEach((el) => el.addEventListener('click', () => toggle(el.id.replace(/\\.marker$/, ''))));
-document.querySelectorAll('#areas polygon').forEach((el) => el.addEventListener('click', () => el.dataset.light && toggle(el.dataset.light)));
+document.querySelectorAll('#areas polygon').forEach((el) => {
+  // mappa della casa con le pagine delle stanze: il clic apre la stanza, come farà Home Assistant
+  el.addEventListener('click', () => (el.dataset.room ? parent.postMessage({ haRoom: el.dataset.room }, '*') : el.dataset.light && toggle(el.dataset.light)));
+  el.addEventListener('contextmenu', (e) => { if (el.dataset.room && el.dataset.light) { e.preventDefault(); toggle(el.dataset.light); } });
+});
 document.querySelectorAll('#contacts polygon').forEach((el) => el.addEventListener('click', () => el.classList.toggle('contact-on')));
 // sensori di prova: clic per cambiare stato
 const DEMO = { temperature: ['21,5 °C', '25,8 °C'], humidity: ['48 %', '71 %'], co2: ['650 ppm', '950 ppm', '1400 ppm'], door: ['Chiusa', 'Aperta'], window: ['Chiusa', 'Aperta'], generic: ['on', 'off'] };
@@ -82,14 +89,29 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
   const [cutaway, setCutaway] = useState(false);
   const [look, setLook] = useState<HaLook>('bright');
   const [slug, setSlug] = useState(() => slugify(project.name || 'casa'));
+  /** una pagina per stanza: toccando la stanza sulla mappa della casa si apre la sua */
+  const [perRoom, setPerRoom] = useState(true);
+  const [dashboard, setDashboard] = useState('');
+  const dash = dashboardPath(dashboard || `dashboard-${slugify(slug)}`);
   const [busy, setBusy] = useState('');
-  const [result, setResult] = useState<{ bundle: BundleFiles; doc: string; view: HaView } | null>(null);
+  /** anteprime: casa (chiave '') e stanze (slug) */
+  const [result, setResult] = useState<{ bundle: BundleFiles; docs: Map<string, string>; view: HaView } | null>(null);
+  const [shown, setShown] = useState('');
   const api = useRef<CaptureApi | null>(null);
   const onReady = useCallback((a: CaptureApi) => (api.current = a), []);
 
   const der = useMemo(() => derive(project), [project]);
   const ents = useMemo(() => collectEntities(project, der), [project, der]);
   const nWalls = Object.keys(project.walls).length;
+  const roomList = useMemo(() => mapRooms(der, ents), [der, ents]);
+  const rooms = perRoom && roomList.length > 1;
+
+  // clic su una stanza nell'anteprima della casa
+  useEffect(() => {
+    const m = (e: MessageEvent) => typeof e.data?.haRoom === 'string' && setShown(e.data.haRoom);
+    window.addEventListener('message', m);
+    return () => window.removeEventListener('message', m);
+  }, []);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
@@ -103,20 +125,44 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
     setResult(null);
     try {
       let bundle: BundleFiles;
-      if (view === '2d') bundle = buildBundle(project, view, s);
+      const opts = rooms ? { dashboard: dash, rooms: new Map<string, Rendered>() } : {};
+      if (view === '2d') bundle = buildBundle(project, view, s, undefined, opts);
       else {
         if (!api.current) throw new Error('la scena 3D non è ancora pronta, riprova tra un attimo');
-        const r = await api.current.capture(project, view, { res, size: fixed ? size : undefined, azimuth: view === 'top' ? topRot : azimuth, elevation, cutaway }, ents.lights, look, setBusy);
-        bundle = buildBundle(project, view, s, r);
+        const vo = { res, size: fixed ? size : undefined, azimuth: view === 'top' ? topRot : azimuth, elevation, cutaway };
+        const r = await api.current.capture(project, view, vo, ents.lights, look, setBusy);
+        if (rooms)
+          for (let i = 0; i < roomList.length; i++) {
+            const a = roomList[i];
+            const tag = `Stanza ${i + 1}/${roomList.length}: ${a.name} · `;
+            const lights = ents.lights.filter((l) => pointInPolygon(l, a.room.poly));
+            opts.rooms!.set(a.slug, await api.current.capture(project, view, vo, lights, look, (m) => setBusy(tag + m), a.room));
+          }
+        bundle = buildBundle(project, view, s, r, opts);
       }
       // anteprima: le immagini puntano a /local/… di Home Assistant, qui le sostituisco con copie locali
-      let svg = bundle.files[`${s}.svg`] as string;
-      for (const [path, data] of Object.entries(bundle.files)) {
-        if (path.endsWith('.png')) svg = svg.split(`"${haBase(s)}${path}"`).join(`"${pngDataUrl(data as Uint8Array)}"`);
+      const local = (svg: string) => {
+        for (const [path, data] of Object.entries(bundle.files)) {
+          if (path.endsWith('.png')) svg = svg.split(`"${haBase(s)}${path}"`).join(`"${pngDataUrl(data as Uint8Array)}"`);
+        }
+        return svg;
+      };
+      const css = buildCss(view);
+      let svg = local(bundle.files[`${s}.svg`] as string);
+      // nell'anteprima toccando una stanza si accende la sua luce (o si apre la stanza)
+      const roomOf = new Map(bundle.rooms.map((x) => [x.areaId, x.slug]));
+      for (const a of bundle.layout.areas) {
+        const attrs = [a.entity ? `data-light="${a.entity}"` : '', roomOf.has(a.id) ? `data-room="${roomOf.get(a.id)}"` : ''].filter(Boolean).join(' ');
+        if (attrs) svg = svg.replace(`id="${a.id}"`, `id="${a.id}" ${attrs}`);
       }
-      // nell'anteprima toccando una stanza si accende la sua luce
-      for (const a of bundle.layout.areas) if (a.entity) svg = svg.replace(`id="${a.id}"`, `id="${a.id}" data-light="${a.entity}"`);
-      setResult({ bundle, doc: previewDoc(svg, buildCss(view)), view });
+      const docs = new Map([['', previewDoc(svg, css)]]);
+      for (const x of bundle.rooms) {
+        let rs = local(x.svg);
+        for (const a of x.layout.areas) if (a.entity) rs = rs.replace(`id="${a.id}"`, `id="${a.id}" data-light="${a.entity}"`);
+        docs.set(x.slug, previewDoc(rs, css));
+      }
+      setResult({ bundle, docs, view });
+      setShown('');
       setBusy('');
     } catch (e) {
       setBusy('');
@@ -140,7 +186,7 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
     if (!result) return;
     try {
       await navigator.clipboard.writeText(result.bundle.yaml);
-      notify('YAML copiato: incollalo in una card Manuale della dashboard');
+      notify(result.bundle.rooms.length ? "YAML copiato: incollalo nell'«Editor di configurazione raw» della dashboard" : 'YAML copiato: incollalo in una card Manuale della dashboard');
     } catch {
       notify('Non riesco a copiare: apri il file .yaml dentro lo ZIP', true);
     }
@@ -254,6 +300,22 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
                 </label>
               </>
             )}
+            {roomList.length > 1 && (
+              <label className="check" data-tip="Toccando una stanza sulla mappa della casa si apre una pagina con la mappa di quella stanza, ingrandita. Tenendola premuta accendi/spegni la sua luce">
+                <input type="checkbox" checked={perRoom} onChange={(e) => setPerRoom(e.target.checked)} /> Una pagina per ogni stanza ({roomList.length})
+              </label>
+            )}
+            {rooms && (
+              <>
+                <label className="prop" data-tip="Indirizzo della dashboard in Home Assistant: crea una dashboard nuova (Impostazioni → Dashboard → Aggiungi) e copia qui la parte dell'indirizzo dopo il nome del server, es. /dashboard-casa">
+                  <span>Dashboard</span>
+                  <input value={dashboard} placeholder={dash} onChange={(e) => setDashboard(e.target.value)} onBlur={() => dashboard && setDashboard(dashboardPath(dashboard))} />
+                </label>
+                <p className="muted small" style={{ margin: 0 }}>
+                  → pagine <code>{dash}/casa</code>, <code>{dash}/{roomList[0].slug}</code>…
+                </p>
+              </>
+            )}
             <label className="prop" data-tip="Nome della cartella in Home Assistant: /config/www/floorplan/<nome>/">
               <span>Cartella</span>
               <input value={slug} onChange={(e) => setSlug(e.target.value)} onBlur={() => setSlug(slugify(slug))} />
@@ -282,7 +344,7 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
               <button disabled={!result || !!busy} onClick={download}>
                 ⬇ Scarica ZIP
               </button>
-              <button disabled={!result || !!busy} onClick={copyYaml} data-tip="Copia la configurazione della card da incollare in Home Assistant">
+              <button disabled={!result || !!busy} onClick={copyYaml} data-tip={rooms ? 'Copia la configurazione della dashboard (casa + stanze) da incollare in Home Assistant' : 'Copia la configurazione della card da incollare in Home Assistant'}>
                 📋 Copia YAML
               </button>
             </div>
@@ -292,9 +354,24 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
             {!busy && !result && <p className="muted">Scegli la vista e premi «✨ Crea mappa» per vedere l'anteprima.</p>}
             {result && !busy && (
               <>
-                <iframe title="Anteprima mappa" srcDoc={result.doc} sandbox="allow-scripts" />
+                {result.bundle.rooms.length > 0 && (
+                  <div className="row ha-pages">
+                    <button className={shown === '' ? 'on small' : 'small'} onClick={() => setShown('')}>
+                      🏠 Casa
+                    </button>
+                    {result.bundle.rooms.map((x) => (
+                      <button key={x.slug} className={shown === x.slug ? 'on small' : 'small'} onClick={() => setShown(x.slug)}>
+                        {x.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <iframe key={shown} title="Anteprima mappa" srcDoc={result.docs.get(shown) ?? result.docs.get('')} sandbox="allow-scripts" />
                 <p className="muted small" style={{ margin: 0 }}>
-                  Prova: clicca le stanze o i pallini gialli per accendere le luci, una porta per «aprirla»{result.view !== '2d' && look === 'daynight' ? ', G per giorno/notte' : ''}.
+                  {result.bundle.rooms.length > 0 && shown === ''
+                    ? 'Prova: clicca una stanza per aprirla (tasto destro = la sua luce), i pallini gialli accendono le luci'
+                    : 'Prova: clicca le stanze o i pallini gialli per accendere le luci'}
+                  , una porta per «aprirla»{result.view !== '2d' && look === 'daynight' ? ', G per giorno/notte' : ''}.
                 </p>
               </>
             )}

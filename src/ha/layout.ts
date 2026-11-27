@@ -1,7 +1,7 @@
 // Disposizione degli elementi della mappa (in coordinate dell'immagine): condivisa da SVG e YAML,
 // così gli id degli elementi SVG coincidono sempre con quelli usati nelle regole.
-import { add, mul, norm, perp, pointInPolygon, sub, type V } from '../model/geom';
-import type { Derived } from '../model/derived';
+import { add, mul, norm, perp, pointInPolygon, sub, type Room, type V } from '../model/geom';
+import { roomWalls, type Derived } from '../model/derived';
 import type { Project, TapAction } from '../model/types';
 import { resolveTap } from './tap';
 import { entityFile, slugify, type HaEntities } from './entities';
@@ -24,6 +24,10 @@ export interface LayoutLight {
 
 export interface LayoutArea {
   id: string;
+  /** chiave della stanza (Derived.rooms) */
+  key: string;
+  /** nome in forma di id (cucina, camera_da_letto…): cartella e sottopagina della stanza */
+  slug: string;
   name: string;
   points: V[];
   /** luce che si accende/spegne toccando la stanza */
@@ -67,8 +71,29 @@ function openingQuad(p: Project, openingId: string, vertical: boolean, toPx: ToP
   return [add(s0, mul(n, h)), add(s1, mul(n, h)), add(s1, mul(n, -h)), add(s0, mul(n, -h))].map((q) => toPx(q.x, q.y, w.height));
 }
 
-export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: { width: number; height: number; x0?: number; y0?: number; toPixel: ToPixel; vertical: boolean; planar?: boolean }): Layout {
+/** solo le entità di una stanza: punti dentro il suo poligono, aperture sui suoi muri */
+function entitiesOf(p: Project, ents: HaEntities, room: Room): HaEntities {
+  const inside = (q: V) => pointInPolygon(q, room.poly);
+  const walls = roomWalls(p, room);
+  return {
+    lights: ents.lights.filter(inside),
+    sensors: ents.sensors.filter(inside),
+    contacts: ents.contacts.filter((o) => walls.has(o.wallId)),
+    cameras: ents.cameras.filter(inside),
+    warnings: [],
+  };
+}
+
+export function buildLayout(
+  p: Project,
+  der: Derived,
+  allEnts: HaEntities,
+  frame: { width: number; height: number; x0?: number; y0?: number; toPixel: ToPixel; vertical: boolean; planar?: boolean },
+  /** mappa di una sola stanza */
+  room?: Room,
+): Layout {
   const { toPixel: toPx, vertical } = frame;
+  const ents = room ? entitiesOf(p, allEnts, room) : allEnts;
   const u = Math.max(frame.width, frame.height) / 100;
   const roomOf = (q: V) => der.rooms.find((r) => pointInPolygon(q, r.poly));
 
@@ -85,17 +110,13 @@ export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: {
     };
   });
 
-  const used = new Set<string>();
-  // gli spazi esterni restano aree solo se hanno una luce (es. luce del giardino)
-  const rooms = der.rooms.filter((r) => !der.roomLabel.get(r.key)?.outdoor || ents.lights.some((l) => pointInPolygon(l, r.poly)));
-  const areas: LayoutArea[] = rooms.map((r, i) => {
-    const name = der.roomLabel.get(r.key)?.name || `Stanza ${i + 1}`;
-    let id = `area.${slugify(name)}`;
-    for (let k = 2; used.has(id); k++) id = `area.${slugify(name)}_${k}`;
-    used.add(id);
-    const light = ents.lights.find((l) => pointInPolygon(l, r.poly));
-    return { id, name, points: (r.inner.length >= 3 ? r.inner : r.poly).map((q) => toPx(q.x, q.y, 0)), entity: light?.entityId, tap: light ? resolveTap(light.tap, 'toggle') : undefined };
-  });
+  // (calcolate sempre su tutta la casa, così id e nomi coincidono tra la mappa della casa e quella della stanza)
+  const areas: LayoutArea[] = mapRooms(der, allEnts)
+    .filter((a) => !room || a.room.key === room.key)
+    .map(({ room: r, id, slug, name }) => {
+      const light = ents.lights.find((l) => pointInPolygon(l, r.poly));
+      return { id, key: r.key, slug, name, points: (r.inner.length >= 3 ? r.inner : r.poly).map((q) => toPx(q.x, q.y, 0)), entity: light?.entityId, tap: light ? resolveTap(light.tap, 'toggle') : undefined };
+    });
 
   return {
     width: frame.width,
@@ -109,4 +130,19 @@ export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: {
     contacts: ents.contacts.map((o) => ({ entityId: o.haEntity!, points: openingQuad(p, o.id, vertical, toPx), tap: resolveTap(o.tap, 'more-info') })).filter((c) => c.points.length),
     cameras: ents.cameras.map((c) => ({ entityId: c.haEntity!, label: c.label || '', at: toPx(c.x, c.y, vertical ? c.z : 0), tap: resolveTap(c.tap, 'more-info') })),
   };
+}
+
+/** stanze della mappa con il loro id: gli spazi esterni restano solo se hanno una luce (es. luce del giardino) */
+export function mapRooms(der: Derived, ents: HaEntities): { room: Room; id: string; slug: string; name: string }[] {
+  // «casa» è la pagina della casa intera nella dashboard
+  const used = new Set<string>(['casa']);
+  return der.rooms
+    .filter((r) => !der.roomLabel.get(r.key)?.outdoor || ents.lights.some((l) => pointInPolygon(l, r.poly)))
+    .map((r, i) => {
+      const name = der.roomLabel.get(r.key)?.name || `Stanza ${i + 1}`;
+      let slug = slugify(name);
+      for (let k = 2; used.has(slug); k++) slug = `${slugify(name)}_${k}`;
+      used.add(slug);
+      return { room: r, id: `area.${slug}`, slug, name };
+    });
 }

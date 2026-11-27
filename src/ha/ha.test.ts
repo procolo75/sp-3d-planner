@@ -5,6 +5,9 @@ import { emptyProject, type Project } from '../model/types';
 import { collectEntities, slugify, validEntityId } from './entities';
 import { buildBundle, zipBundle } from './bundle';
 import { captureCamera } from './views';
+import { derive } from '../model/derived';
+import { mapRooms } from './layout';
+import type { Rendered } from './bundle';
 
 /** due stanze 400x400 affiancate con una porta, cucina e salotto */
 function house(): Project {
@@ -197,5 +200,82 @@ describe('azione al tocco', () => {
     const y = buildBundle(p, '2d', 'casa').yaml;
     expect(rule(y, 'sensor.temp_cucina')).toContain('action: more-info');
     expect(rule(y, 'light.cucina', 'light.cucina.marker')).toContain('action: toggle');
+  });
+});
+
+
+describe('una pagina per ogni stanza', () => {
+  const roomRenders = (p: Project, view: 'top' | 'iso') => {
+    const der = derive(p);
+    const out = new Map<string, Rendered>();
+    for (const a of mapRooms(der, collectEntities(p, der))) {
+      const cam = captureCamera(p, view, { res: 800, azimuth: 25, elevation: 45, cutaway: false }, a.room.poly)!;
+      out.set(a.slug, { ...cam, base: new Uint8Array([7]), lights: new Map([['light.cucina', new Uint8Array([8])], ['light.salotto', new Uint8Array([9])]]) });
+    }
+    return out;
+  };
+
+  it('inquadratura della stanza: la stanza è dentro, il resto della casa fuori', () => {
+    const p = house();
+    const cucina = derive(p).rooms.find((r) => r.poly.some((q) => q.x === 0))!;
+    const cam = captureCamera(p, 'top', { res: 1000, azimuth: 0, elevation: 45, cutaway: false }, cucina.poly)!;
+    for (const q of cucina.poly.map((v) => cam.toPixel(v.x, v.y))) {
+      expect(q.x).toBeGreaterThan(0);
+      expect(q.x).toBeLessThan(cam.width);
+    }
+    expect(cam.toPixel(800, 200).x).toBeGreaterThan(cam.width);
+  });
+
+  it('3D: file per stanza, solo le sue entità, dashboard con le sottopagine', () => {
+    const p = house();
+    const b = buildBundle(p, 'iso', 'casa', fakeRender(p, 'iso'), { dashboard: 'dashboard-casa', rooms: roomRenders(p, 'iso') });
+    expect(b.rooms.map((r) => r.slug).sort()).toEqual(['cucina', 'salotto']);
+    expect(b.files['rooms/cucina/cucina.svg']).toBeDefined();
+    expect(b.files['rooms/cucina/base.png']).toBeInstanceOf(Uint8Array);
+    // ogni stanza ha solo la sua luce
+    expect(b.files['rooms/cucina/lights/light_cucina.png']).toBeDefined();
+    expect(b.files['rooms/cucina/lights/light_salotto.png']).toBeUndefined();
+    const cucina = b.files['rooms/cucina/cucina.svg'] as string;
+    expect(cucina).toContain('href="/local/floorplan/casa/rooms/cucina/base.png"');
+    expect(cucina).toContain('id="sensor.temp_cucina"');
+    expect(cucina).not.toContain('id="sensor.salotto_eco2"');
+    // la porta tra le due stanze compare in entrambe
+    expect(cucina).toContain('id="binary_sensor.porta"');
+    expect(b.files['rooms/salotto/salotto.svg'] as string).toContain('id="binary_sensor.porta"');
+
+    const y = b.yaml;
+    expect(y).toContain('views:');
+    expect(y).toContain('    path: casa');
+    expect(y).toContain('    path: cucina\n    subview: true\n    back_path: /dashboard-casa/casa');
+    expect(y).toContain('image: /local/floorplan/casa/rooms/cucina/cucina.svg');
+    expect(y).toContain('stylesheet: /local/floorplan/casa/casa.css');
+    // mappa della casa: tocco = apre la stanza, tieni premuto = la luce
+    expect(y).toMatch(/element: 'area\.cucina'\n\s+tap_action:\n\s+action: navigate\n\s+navigation_path: '\/dashboard-casa\/cucina'\n\s+hold_action:\n\s+action: toggle/);
+  });
+
+  it('YAML della dashboard indentato correttamente', () => {
+    const p = house();
+    const y = buildBundle(p, '2d', 'casa', undefined, { dashboard: '/dashboard-casa/' }).yaml;
+    expect(y).toContain('      - type: custom:floorplan-card\n');
+    expect(y).toContain('\n        full_height: true\n');
+    expect(y).toContain('\n        config:\n          image: /local/floorplan/casa/casa.svg');
+    expect(y).toContain('\n          rules:\n');
+    expect(y).toContain('\n              - entity: light.cucina\n                element:');
+    // 2D: la stanza è la stessa pianta ritagliata, senza PNG
+    expect(Object.keys(buildBundle(p, '2d', 'casa', undefined, { dashboard: 'd' }).files).some((f) => f.endsWith('.png'))).toBe(false);
+  });
+
+  it('stanza senza luce: si apre lo stesso, con una regola solo «element»', () => {
+    const p = house();
+    delete p.lights!.l2;
+    const y = buildBundle(p, '2d', 'casa', undefined, { dashboard: 'dashboard-casa' }).yaml;
+    expect(y).toContain("              - element: 'area.salotto'\n                tap_action:\n                  action: navigate");
+  });
+
+  it('senza pagine per stanza lo YAML resta la card singola', () => {
+    const y = buildBundle(house(), '2d', 'casa').yaml;
+    expect(y).not.toContain('views:');
+    expect(y).not.toContain('navigate');
+    expect(y.split('\n').find((l) => l.startsWith('type:'))).toBe('type: custom:floorplan-card');
   });
 });

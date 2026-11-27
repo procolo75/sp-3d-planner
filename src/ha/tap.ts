@@ -31,24 +31,26 @@ export function resolveTap(t: TapAction | undefined, def: TapActionKind): TapAct
 /** stringa YAML tra apici singoli (l'apice si raddoppia) */
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-/** righe `tap_action` di una regola (indentate per stare sotto `- entity:`) */
-export function tapYaml(t: TapAction, own: string): string[] {
+/** righe `tap_action` (o `hold_action`) di una regola, indentate per stare sotto `- entity:` */
+export function tapYaml(t: TapAction, own: string | undefined, key: 'tap_action' | 'hold_action' = 'tap_action'): string[] {
   const other = t.entity && t.entity !== own ? t.entity : undefined;
+  const target = other ?? own;
+  const head = `        ${key}:`;
   switch (t.action) {
     case 'none':
-      return ['        tap_action: false', '        hover_action: false'];
+      return key === 'tap_action' ? ['        tap_action: false', '        hover_action: false'] : [`        ${key}: false`];
     case 'more-info':
-      return ['        tap_action:', '          action: more-info', ...(other ? [`          entity: ${other}`] : [])];
+      return [head, '          action: more-info', ...(other ? [`          entity: ${other}`] : [])];
     case 'toggle':
       // un'altra entità: il toggle di ha-floorplan agisce solo sulla propria, quindi passa dal servizio generico
       return other
-        ? ['        tap_action:', '          action: call-service', '          service: homeassistant.toggle', '          service_data:', `            entity_id: ${other}`]
-        : ['        tap_action:', '          action: toggle'];
+        ? [head, '          action: call-service', '          service: homeassistant.toggle', '          service_data:', `            entity_id: ${other}`]
+        : [head, '          action: toggle'];
     case 'call-service':
-      return ['        tap_action:', '          action: call-service', `          service: ${t.service}`, '          service_data:', `            entity_id: ${other ?? own}`];
+      return [head, '          action: call-service', `          service: ${t.service}`, ...(target ? ['          service_data:', `            entity_id: ${target}`] : [])];
     case 'navigate':
-      return ['        tap_action:', '          action: navigate', `          navigation_path: ${q(t.path!)}`];
+      return [head, '          action: navigate', `          navigation_path: ${q(t.path!)}`];
     case 'url':
-      return ['        tap_action:', '          action: url', `          url_path: ${q(t.url!)}`];
+      return [head, '          action: url', `          url_path: ${q(t.url!)}`];
   }
 }

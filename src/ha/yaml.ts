@@ -23,7 +23,17 @@ function classRule(entity: string, element: string, cls: string, tap: TapAction)
   return out.join('\n');
 }
 
-export function buildYaml(L: Layout, o: { slug: string; base: string; withDay: boolean; title: string }) {
+export interface CardOpts {
+  /** percorsi di SVG e CSS in Home Assistant (/local/…) */
+  image: string;
+  stylesheet: string;
+  withDay: boolean;
+  /** mappa della casa con le pagine delle stanze: id dell'area → pagina da aprire */
+  roomPaths?: Map<string, string>;
+}
+
+/** card ha-floorplan (YAML senza indentazione iniziale) */
+export function buildCard(L: Layout, o: CardOpts) {
   const r: string[] = [];
   if (o.withDay) r.push('      # giorno/notte: l\'immagine di giorno sparisce al tramonto', classRule('sun.sun', 'sun.sun', 'sun', NONE));
   if (L.lights.length) r.push('      # luci: la stanza si illumina quando la luce è accesa');
@@ -31,9 +41,24 @@ export function buildYaml(L: Layout, o: { slug: string; base: string; withDay: b
     r.push(classRule(l.entityId, l.entityId, 'light', NONE));
     r.push(classRule(l.entityId, `${l.entityId}.marker`, 'light', l.tap));
   }
-  const areas = L.areas.filter((a) => a.entity);
-  if (areas.length) r.push('      # stanze: toccandole fai la stessa cosa della loro luce');
-  for (const a of areas) r.push(classRule(a.entity!, a.id, 'area', a.tap ?? { action: 'toggle' }));
+  if (o.roomPaths) {
+    // mappa della casa con una pagina per stanza: tocco = apre la stanza, tieni premuto = la sua luce
+    const areas = L.areas.filter((a) => o.roomPaths!.has(a.id));
+    if (areas.length) r.push('      # stanze: toccandole si apre la loro mappa, tenendole premute si accende/spegne la luce');
+    for (const a of areas) {
+      const go: TapAction = { action: 'navigate', path: o.roomPaths.get(a.id)! };
+      if (a.entity) {
+        const rule = classRule(a.entity, a.id, 'area', go).split('\n');
+        // hold_action subito dopo tap_action, prima di state_action
+        rule.splice(rule.indexOf('        state_action:'), 0, ...tapYaml(a.tap ?? { action: 'toggle' }, a.entity, 'hold_action'));
+        r.push(rule.join('\n'));
+      } else r.push([`      - element: ${q(a.id)}`, ...tapYaml(go, undefined)].join('\n'));
+    }
+  } else {
+    const areas = L.areas.filter((a) => a.entity);
+    if (areas.length) r.push('      # stanze: toccandole fai la stessa cosa della loro luce');
+    for (const a of areas) r.push(classRule(a.entity!, a.id, 'area', a.tap ?? { action: 'toggle' }));
+  }
   if (L.sensors.length) r.push('      # sensori: mostrano il loro valore');
   for (const s of L.sensors) {
     const binary = s.kind === 'door' || s.kind === 'window';
@@ -72,14 +97,12 @@ export function buildYaml(L: Layout, o: { slug: string; base: string; withDay: b
   if (L.cameras.length) r.push('      # telecamere: toccandole vedi le immagini');
   for (const c of L.cameras) r.push([`      - entity: ${c.entityId}`, ...tapYaml(c.tap, c.entityId)].join('\n'));
 
-  return `# Card ha-floorplan generata da SP 3D Planner — «${o.title}»
-# Dashboard → Modifica → Aggiungi card → Manuale, e incolla tutto questo testo.
-type: custom:floorplan-card
+  return `type: custom:floorplan-card
 # la mappa occupa tutta l'altezza disponibile, senza scroll
 full_height: true
 config:
-  image: ${o.base}${o.slug}.svg
-  stylesheet: ${o.base}${o.slug}.css
+  image: ${o.image}
+  stylesheet: ${o.stylesheet}
   # togli il # qui sotto per vedere gli errori (es. un'entità scritta male)
   # log_level: info
   defaults:
@@ -87,5 +110,43 @@ config:
     tap_action: more-info
   rules:
 ${r.length ? r.join('\n') : '      []'}
+`;
+}
+
+/** card singola, da incollare in una card Manuale */
+export function buildYaml(L: Layout, o: { slug: string; base: string; withDay: boolean; title: string }) {
+  return `# Card ha-floorplan generata da SP 3D Planner — «${o.title}»
+# Dashboard → Modifica → Aggiungi card → Manuale, e incolla tutto questo testo.
+${buildCard(L, { image: `${o.base}${o.slug}.svg`, stylesheet: `${o.base}${o.slug}.css`, withDay: o.withDay })}`;
+}
+
+const indent = (text: string, n: number) =>
+  text
+    .trimEnd()
+    .split('\n')
+    .map((l, i) => (i === 0 ? l : l ? ' '.repeat(n) + l : l))
+    .join('\n');
+
+/** percorso della dashboard normalizzato: «dashboard-casa» → «/dashboard-casa», senza / finale */
+export const dashboardPath = (s: string) => '/' + s.trim().replace(/^\/+|\/+$/g, '');
+
+/** dashboard intera: pagina «Casa» con la mappa completa + una sottopagina per ogni stanza */
+export function buildDashboard(o: { title: string; dashboard: string; house: string; rooms: { name: string; slug: string; card: string }[] }) {
+  const d = dashboardPath(o.dashboard);
+  const view = (title: string, path: string, card: string, sub: boolean) =>
+    [
+      `  - title: ${q(title)}`,
+      `    path: ${path}`,
+      ...(sub ? ['    subview: true', `    back_path: ${d}/casa`] : []),
+      '    panel: true',
+      '    cards:',
+      `      - ${indent(card, 8)}`,
+    ].join('\n');
+  return `# Dashboard generata da SP 3D Planner — «${o.title}»
+# Impostazioni → Dashboard → apri la dashboard (indirizzo ${d}) → ✏️ Modifica
+# → ⋮ → «Editor di configurazione raw», sostituisci tutto con questo testo e salva.
+title: ${q(o.title)}
+views:
+${[view(o.title, 'casa', o.house, false), ...o.rooms.map((r) => view(r.name, r.slug, r.card, true))].join('\n')}
 `;
 }

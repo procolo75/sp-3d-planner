@@ -26,8 +26,9 @@ Guida per mettere in Home Assistant la mappa creata con SP 3D Planner (card **ha
 7. Apri il menu **File → Mappa per Home Assistant…**:
    - scegli la vista e **trascina la casa** nel riquadro di anteprima per decidere da dove guardarla (nella vista dall'alto giri la pianta);
    - scegli l'**Aspetto**: **☀ Sempre chiara** (consigliato: casa chiara e senza ombre, le luci accese la illuminano) oppure **🌙 Giorno/notte** (chiara di giorno, buia dopo il tramonto, segue `sun.sun`);
-   - premi **✨ Crea mappa**;
-   - prova l'anteprima: clic sulle stanze accende le luci, clic sui sensori ne cambia lo stato;
+   - **Una pagina per ogni stanza** (attiva di default): sulla mappa della casa toccando una stanza si apre la sua mappa, ingrandita e con solo i suoi muri. Tenendola premuta si accende/spegne la sua luce. In **Dashboard** scrivi l'indirizzo della dashboard che creerai in HA (vedi il passo 4), per esempio `/dashboard-casa`;
+   - premi **✨ Crea mappa**: con le pagine per stanza ci vuole un po' di più, perché ogni stanza ha i suoi render;
+   - prova l'anteprima: i bottoni in alto (🏠 Casa, Cucina…) mostrano le pagine. Sulla casa il clic su una stanza la apre e il tasto destro accende la sua luce. Il clic sui sensori ne cambia lo stato;
    - premi **⬇ Scarica ZIP**.
 8. Annota il nome della **Cartella** che compare nella finestra, per esempio `casa_sub_39`. Più sotto la chiamo `<nome>`.
 
@@ -115,7 +116,18 @@ Puoi provare anche `.../<nome>/base.png`, che deve mostrare la casa al buio.
 
 ---
 
-## 4. Aggiungi la card alla dashboard
+## 4. Aggiungi la mappa alla dashboard
+
+### Con una pagina per ogni stanza
+
+Lo YAML è la configurazione **di tutta la dashboard**: una pagina «Casa» più una sottopagina per ogni stanza, con la freccia ← per tornare indietro.
+
+1. **Impostazioni → Dashboard → + Aggiungi dashboard → Nuova dashboard da zero**. Il nome è libero, per esempio «Casa».
+2. Aprila e guarda l'indirizzo nella barra del browser, per esempio `http://…:8123/dashboard-casa/0`. La parte `/dashboard-casa` deve coincidere con il campo **Dashboard** del planner. Se è diversa, correggi il campo e premi di nuovo **✨ Crea mappa** (le immagini non cambiano, cambiano solo i link tra le pagine nello YAML).
+3. Premi **✏️ Modifica**, poi **⋮** in alto a destra → **Editor di configurazione raw**.
+4. Cancella tutto e incolla il contenuto di `<nome>.yaml` (oppure il tasto **📋 Copia YAML**). **Salva** e chiudi.
+
+### Una sola card (senza pagine per stanza)
 
 1. Apri la dashboard e premi **✏️ Modifica**.
 2. Consigliato: crea una **nuova vista** (il **+** accanto alle schede) con tipo **Pannello (1 card)**, così la mappa occupa tutta la larghezza.
@@ -132,7 +144,9 @@ Segna cosa funziona e cosa no.
 - [ ] La mappa compare: immagine della casa più i pallini gialli delle luci.
 - [ ] **Accendi una luce da HA** (dalla sua card o dall'app): la stanza si illumina sulla mappa?
 - [ ] **Tocca il pallino giallo** sulla mappa: la luce si accende e si spegne davvero?
-- [ ] **Tocca la stanza** (non il pallino): la sua luce si accende e si spegne?
+- [ ] **Tocca la stanza** (non il pallino): la sua luce si accende e si spegne? *Con le pagine per stanza*: si apre la pagina della stanza?
+- [ ] *Pagine per stanza*: **tieni premuta la stanza** sulla mappa della casa → la sua luce si accende e si spegne?
+- [ ] *Pagine per stanza*: nella pagina della stanza si vedono solo i suoi muri, ingranditi, con luci e sensori che funzionano? La **freccia ←** torna alla casa?
 - [ ] La luce **resta dentro la stanza**, senza uscire nelle stanze vicine?
 - [ ] **Sensore temperatura/umidità**: mostra il valore con l'unità (es. `21.5 °C`)?
 - [ ] **Sensore eCO2**: mostra i ppm e lo sfondo è verde, giallo o rosso secondo il valore?
@@ -172,6 +186,8 @@ Segna cosa funziona e cosa no.
 > - `element:` insieme a `entity:` nella stessa regola;
 > - `tap_action: false`;
 > - `entity:` dentro `tap_action` con `more-info` (info di un'altra entità);
+> - `hold_action` (tieni premuto sulla stanza) e `navigate` verso le pagine delle stanze;
+> - le regole con solo `element:` senza `entity:` (stanze senza luce, che però devono aprirsi lo stesso);
 > - il comportamento di `floorplan.class_set` sulle classi.
 >
 > Se il log segnala errori su queste, mandameli e le correggo.

@@ -1,12 +1,12 @@
 // Scena 3D nascosta usata solo per i render della mappa di Home Assistant: non tocca la vista dell'utente.
 import { Canvas, useThree } from '@react-three/fiber';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { World } from '../three/Scene3D';
 import { S } from '../three/wallGeometry';
 import type { Light, Project } from '../model/types';
 import { derive } from '../model/derived';
-import { pointInPolygon } from '../model/geom';
+import { pointInPolygon, type Room } from '../model/geom';
 import { captureCamera, type CaptureCamera, type HaView, type ViewOpts } from './views';
 
 export interface CaptureResult extends CaptureCamera {
@@ -21,7 +21,8 @@ export interface CaptureResult extends CaptureCamera {
 }
 
 export interface CaptureApi {
-  capture(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, lights: Light[], look: HaLook, progress?: (msg: string) => void): Promise<CaptureResult>;
+  /** con `room` rende solo quella stanza (i suoi muri e i suoi mobili), inquadrata da vicino */
+  capture(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, lights: Light[], look: HaLook, progress?: (msg: string) => void, room?: Room): Promise<CaptureResult>;
 }
 
 /** «bright»: casa sempre chiara, senza ombre; «daynight»: buia di sera + immagine di giorno che segue sun.sun */
@@ -87,14 +88,17 @@ function lamp(l: Light) {
   return pl;
 }
 
-function Bridge({ onReady }: { onReady: (api: CaptureApi) => void }) {
+type SetFocus = (at: { x: number; y: number } | null) => Promise<void>;
+
+function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; setFocus: SetFocus }) {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   useEffect(() => {
     onReady({
-      async capture(p, view, o, lights, look, progress) {
-        const cam = captureCamera(p, view, o);
+      async capture(p, view, o, lights, look, progress, room) {
+        const cam = captureCamera(p, view, o, room?.poly);
         if (!cam) throw new Error('La casa non ha ancora muri');
+        await setFocus(room ? (derive(p).roomLabelPos.get(room.key) ?? room.poly[0]) : null);
         await frame();
         await frame();
         gl.setPixelRatio(1);
@@ -200,17 +204,42 @@ function Bridge({ onReady }: { onReady: (api: CaptureApi) => void }) {
         return { ...cam, base: dataUrlBytes(baseUrl), day, lights: out, previewUrl: dayUrl ?? baseUrl };
       },
     });
-  }, [gl, scene, onReady]);
+  }, [gl, scene, onReady, setFocus]);
+  return null;
+}
+
+/** avvisa quando la scena ha montato la stanza richiesta */
+function FocusDone({ at, onDone }: { at: { x: number; y: number } | null; onDone: (at: { x: number; y: number } | null) => void }) {
+  useEffect(() => onDone(at), [at, onDone]);
   return null;
 }
 
 /** canvas WebGL fuori dallo schermo con la casa: i render vengono letti da qui */
 export function HaCaptureCanvas({ cutaway, onReady }: { cutaway: boolean; onReady: (api: CaptureApi) => void }) {
+  // stanza da rendere da sola: la scena si aggiorna con React, il render aspetta che sia montata
+  const [focusAt, setFocusAt] = useState<{ x: number; y: number } | null>(null);
+  const waiting = useRef<(() => void) | null>(null);
+  const current = useRef(focusAt);
+  // chiamata da dentro il Canvas (ha un suo renderer React): a quel punto la scena è già aggiornata
+  const done = useCallback((at: typeof focusAt) => {
+    current.current = at;
+    waiting.current?.();
+    waiting.current = null;
+  }, []);
+  const setFocus = useCallback<SetFocus>((at) => {
+    const same = (a: typeof at, b: typeof at) => a === b || (!!a && !!b && a.x === b.x && a.y === b.y);
+    if (same(at, current.current)) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      waiting.current = resolve;
+      setFocusAt(at);
+    });
+  }, []);
   return (
     <div style={{ position: 'fixed', left: -10000, top: 0, width: 64, height: 64, pointerEvents: 'none' }} aria-hidden="true">
       <Canvas shadows dpr={1} frameloop="never" gl={{ preserveDrawingBuffer: true, alpha: true, logarithmicDepthBuffer: true, antialias: true }}>
-        <World cutaway={cutaway} interactive={false} exportMode />
-        <Bridge onReady={onReady} />
+        <World cutaway={cutaway} interactive={false} exportMode focusAt={focusAt} />
+        <Bridge onReady={onReady} setFocus={setFocus} />
+        <FocusDone at={focusAt} onDone={done} />
       </Canvas>
     </div>
   );

@@ -985,6 +985,11 @@ button.link {
   padding: 10px;
   min-height: 420px;
 }
+.ha-pages {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
 .ha-preview iframe {
   width: 100%;
   flex: 1;

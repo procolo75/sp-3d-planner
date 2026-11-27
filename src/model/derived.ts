@@ -47,3 +47,15 @@ export function focusOnRoom(der: Derived, key: string, setFocus: (p: { x: number
   const pos = der.roomLabelPos.get(key);
   if (pos) setFocus({ x: pos.x, y: pos.y });
 }
+
+/** muri che delimitano la stanza (lati del suo poligono) */
+export function roomWalls(p: Project, r: Room): Set<ID> {
+  const set = new Set<ID>();
+  const n = r.nodeIds.length;
+  for (let i = 0; i < n; i++) {
+    const a = r.nodeIds[i];
+    const b = r.nodeIds[(i + 1) % n];
+    for (const w of Object.values(p.walls)) if ((w.a === a && w.b === b) || (w.a === b && w.b === a)) set.add(w.id);
+  }
+  return set;
+}

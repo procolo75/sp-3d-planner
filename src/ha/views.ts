@@ -49,8 +49,8 @@ export function anglesFrom(pos: THREE.Vector3, target: THREE.Vector3) {
   return { azimuth: (Math.atan2(d.x, d.z) * 180) / Math.PI, elevation: (Math.asin(Math.max(-1, Math.min(1, d.y))) * 180) / Math.PI };
 }
 
-function houseCorners(p: Project, cutaway: boolean): THREE.Vector3[] {
-  const ns = Object.values(p.nodes);
+function houseCorners(p: Project, cutaway: boolean, frame?: { x: number; y: number }[]): THREE.Vector3[] {
+  const ns = frame && frame.length >= 3 ? frame : Object.values(p.nodes);
   const H = cutaway ? 110 : Math.max(250, ...Object.values(p.walls).map((w) => w.height));
   const xs = ns.map((n) => n.x);
   const ys = ns.map((n) => n.y);
@@ -74,10 +74,11 @@ function sizeFor(aspect: number, res: number) {
   return { width: Math.max(16, width), height: Math.max(16, height) };
 }
 
-/** Camera che inquadra tutta la casa per la vista scelta, con le dimensioni dell'immagine adatte alla forma della casa. */
-export function captureCamera(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts): CaptureCamera | null {
+/** Camera che inquadra tutta la casa per la vista scelta, con le dimensioni dell'immagine adatte alla forma della casa.
+ *  Con `frame` (poligono di una stanza, in cm) inquadra solo quello. */
+export function captureCamera(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, frame?: { x: number; y: number }[]): CaptureCamera | null {
   if (Object.keys(p.nodes).length < 2) return null;
-  const corners = houseCorners(p, o.cutaway);
+  const corners = houseCorners(p, o.cutaway, frame);
   const box = new THREE.Box3().setFromPoints(corners);
   const center = box.getCenter(new THREE.Vector3());
   if (view === 'top') center.y = 0;
