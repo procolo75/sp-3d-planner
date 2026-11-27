@@ -13,14 +13,23 @@ Guida per mettere in Home Assistant la mappa creata con SP 3D Planner (card **ha
    - *Porta* / *Finestra aperta/chiusa*: per esempio `binary_sensor.finestra_cucina`.
 3. **Porte e finestre** (facoltativo): selezionale e scrivi il sensore di apertura in «Entità HA». Sulla mappa si colora l'apertura stessa.
 4. **Telecamere** (facoltativo): selezionale e scrivi l'entità, per esempio `camera.ingresso`.
-5. Gli entity_id esatti li trovi in HA in **Impostazioni → Dispositivi e servizi → Entità**. Devono essere **identici**: minuscole e `_`.
-6. Apri il menu **File → Mappa per Home Assistant…**:
+5. **Al tocco** (facoltativo): per ogni luce, sensore, porta/finestra o telecamera collegata scegli dal menu a tendina cosa succede quando la tocchi sulla mappa:
+   - *Mostra info e storico*: predefinito per sensori, porte/finestre e telecamere;
+   - *Accendi / spegni*: predefinito per le luci. Toccare la stanza fa la stessa cosa della sua luce;
+   - *Esegui servizio o script*: per esempio `script.buonanotte` oppure `cover.toggle`;
+   - *Apri pagina della dashboard*: per esempio `/lovelace/clima`;
+   - *Apri un link*: un indirizzo `https://…`;
+   - *Niente*: l'elemento resta solo da guardare.
+
+   Con «Su entità» puoi agire su un'altra entità, per esempio aprire `climate.salotto` toccando il sensore di temperatura. Se un'azione resta incompleta, l'export ti avvisa e usa quella predefinita.
+6. Gli entity_id esatti li trovi in HA in **Impostazioni → Dispositivi e servizi → Entità**. Devono essere **identici**: minuscole e `_`.
+7. Apri il menu **File → Mappa per Home Assistant…**:
    - scegli la vista e **trascina la casa** nel riquadro di anteprima per decidere da dove guardarla (nella vista dall'alto giri la pianta);
    - scegli l'**Aspetto**: **☀ Sempre chiara** (consigliato: casa chiara e senza ombre, le luci accese la illuminano) oppure **🌙 Giorno/notte** (chiara di giorno, buia dopo il tramonto, segue `sun.sun`);
    - premi **✨ Crea mappa**;
    - prova l'anteprima: clic sulle stanze accende le luci, clic sui sensori ne cambia lo stato;
    - premi **⬇ Scarica ZIP**.
-7. Annota il nome della **Cartella** che compare nella finestra, per esempio `casa_sub_39`. Più sotto la chiamo `<nome>`.
+8. Annota il nome della **Cartella** che compare nella finestra, per esempio `casa_sub_39`. Più sotto la chiamo `<nome>`.
 
 ---
 
@@ -130,6 +139,7 @@ Segna cosa funziona e cosa no.
 - [ ] **Sensore porta/finestra**: scrive «Aperta» su rosso e «Chiusa» su verde?
 - [ ] **Porta/finestra collegata direttamente** (Entità HA sull'apertura): diventa rossa lampeggiante quando è aperta?
 - [ ] **Telecamera**: toccandola si apre la finestra con le immagini?
+- [ ] **Azioni al tocco personalizzate** (se ne hai scelte): pagina, link, script, «Niente» e «Su entità» fanno quello che ti aspetti?
 - [ ] **Passando sopra** a un elemento (dal PC) compare il riquadro con le informazioni?
 - [ ] **Giorno/notte** (solo se hai scelto quell'aspetto): dopo il tramonto la mappa diventa scura?
 - [ ] Funziona anche dall'**app sul telefono**?
@@ -161,6 +171,7 @@ Segna cosa funziona e cosa no.
 > Nota: alcune opzioni dello YAML le ho scritte seguendo la documentazione di ha-floorplan ma non le ho potute provare su un Home Assistant vero:
 > - `element:` insieme a `entity:` nella stessa regola;
 > - `tap_action: false`;
+> - `entity:` dentro `tap_action` con `more-info` (info di un'altra entità);
 > - il comportamento di `floorplan.class_set` sulle classi.
 >
 > Se il log segnala errori su queste, mandameli e le correggo.

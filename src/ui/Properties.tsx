@@ -5,12 +5,13 @@ import { listBackups, type Backup } from '../model/persist';
 import { CATALOG_BY_ID, colorSlots, POCKET_OPEN_DEFAULT, pocketItemSize, pocketSize } from '../catalog/catalog';
 import { ColorPicker, FLOOR_COLORS, FURNITURE_COLORS, WALL_COLORS } from './ColorPicker';
 import { animateOpen, DOOR_OPEN_DEFAULT, openingOpen, setOpen, stopOpen, type OpenRef } from '../model/pocketAnim';
-import { BINARY_SENSORS, type Item } from '../model/types';
+import { BINARY_SENSORS, type Item, type TapAction, type TapActionKind } from '../model/types';
 import { focusedRoom, focusOnRoom, useDerived } from '../model/derived';
 import { dist } from '../model/geom';
 import { parseLength } from '../import/pdf';
 import { LIGHT_COLORS, useStore } from '../model/store';
 import { suggestEntity, validEntityId } from '../ha/entities';
+import { TAP_LABELS, tapIssue } from '../ha/tap';
 import { fmtLen, wallRoomSides } from '../editor2d/Editor2D';
 import { wallClearLength } from '../editor2d/snapping';
 
@@ -107,6 +108,64 @@ function EntityField({ value, domain, name, onChange, tip }: { value: string | u
           usa «{suggestEntity(domain, name)}»
         </button>
       )}
+    </>
+  );
+}
+
+/** campo di testo che conferma su Invio/blur */
+function TextProp({ label, value, placeholder, onChange, tip }: { label: string; value: string | undefined; placeholder?: string; onChange: (v: string | undefined) => void; tip?: string }) {
+  const [s, setS] = useState(value ?? '');
+  useEffect(() => setS(value ?? ''), [value]);
+  const commit = () => {
+    const t = s.trim();
+    if (t !== (value ?? '')) onChange(t || undefined);
+  };
+  return (
+    <label className="prop" data-tip={tip}>
+      <span>{label}</span>
+      <input value={s} placeholder={placeholder} onChange={(e) => setS(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+    </label>
+  );
+}
+
+/** «Al tocco»: cosa succede toccando l'elemento sulla mappa di Home Assistant */
+function TapField({ value, def, onChange }: { value: TapAction | undefined; def: TapActionKind; onChange: (v: TapAction | undefined) => void }) {
+  const t = value ?? { action: def };
+  // tornare al default (senza altri campi) toglie l'azione dal progetto
+  const set = (n: TapAction) => {
+    const clean = Object.fromEntries(Object.entries(n).filter(([, v]) => v !== undefined)) as unknown as TapAction;
+    onChange(clean.action === def && Object.keys(clean).length === 1 ? undefined : clean);
+  };
+  const issue = value && tapIssue(value);
+  const withEntity = t.action === 'more-info' || t.action === 'toggle' || t.action === 'call-service';
+  return (
+    <>
+      <label className="prop" data-tip="Cosa succede toccandolo sulla mappa di Home Assistant">
+        <span>Al tocco</span>
+        <select value={t.action} onChange={(e) => set({ action: e.target.value as TapActionKind })}>
+          {(Object.keys(TAP_LABELS) as TapActionKind[]).map((k) => (
+            <option key={k} value={k}>
+              {TAP_LABELS[k]}
+              {k === def ? ' (predefinito)' : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+      {t.action === 'call-service' && (
+        <TextProp label="Servizio" value={t.service} placeholder="script.buonanotte" onChange={(v) => set({ ...t, service: v?.toLowerCase() })} tip="Servizio o script di Home Assistant da eseguire (es. script.buonanotte, cover.toggle, scene.turn_on)" />
+      )}
+      {t.action === 'navigate' && <TextProp label="Pagina" value={t.path} placeholder="/lovelace/clima" onChange={(v) => set({ ...t, path: v })} tip="Percorso della pagina della dashboard da aprire: lo vedi nella barra dell'indirizzo (es. /lovelace/clima)" />}
+      {t.action === 'url' && <TextProp label="Link" value={t.url} placeholder="https://…" onChange={(v) => set({ ...t, url: v })} tip="Indirizzo da aprire toccandolo" />}
+      {withEntity && (
+        <TextProp
+          label="Su entità"
+          value={t.entity}
+          placeholder="la sua (lascia vuoto)"
+          onChange={(v) => set({ ...t, entity: v?.toLowerCase() })}
+          tip="Facoltativo: un'altra entità su cui agire (es. climate.salotto per aprire il termostato toccando il sensore di temperatura)"
+        />
+      )}
+      {issue && <p className="warn small">Azione incompleta: {issue}. Nella mappa userà «{TAP_LABELS[def]}».</p>}
     </>
   );
 }
@@ -317,7 +376,10 @@ export function Properties() {
         {o.type === 'window' && <Num label="Davanzale" value={o.sill} onChange={(v) => st.updateOpening(o.id, { sill: Math.max(0, v) })} />}
         <Num tip="Distanza del centro dell'apertura dall'inizio del muro, in cm" label="Posizione" value={o.offset} onChange={(v) => st.updateOpening(o.id, { offset: v })} />
         {o.type !== 'arch' && (
-          <EntityField value={o.haEntity} domain="binary_sensor" onChange={(v) => st.updateOpening(o.id, { haEntity: v })} tip="Sensore di apertura in Home Assistant (es. binary_sensor.porta_ingresso): sulla mappa la porta diventa rossa quando è aperta. Lascia vuoto se non c'è." />
+          <>
+            <EntityField value={o.haEntity} domain="binary_sensor" onChange={(v) => st.updateOpening(o.id, { haEntity: v })} tip="Sensore di apertura in Home Assistant (es. binary_sensor.porta_ingresso): sulla mappa la porta diventa rossa quando è aperta. Lascia vuoto se non c'è." />
+            {o.haEntity && <TapField value={o.tap} def="more-info" onChange={(tap) => st.updateOpening(o.id, { tap })} />}
+          </>
         )}
         {o.type === 'sliding' && (
           <div className="skytta">
@@ -450,7 +512,8 @@ export function Properties() {
       <aside className="props">
         <h3>📹 {c.label || 'Telecamera'}</h3>
         <RoomName value={c.label ?? ''} placeholder="es. Ingresso" onChange={(label) => st.updateCamera(c.id, { label: label || undefined })} />
-        <EntityField value={c.haEntity} domain="camera" name={c.label} onChange={(v) => st.updateCamera(c.id, { haEntity: v })} tip="Entità della telecamera in Home Assistant (es. camera.ingresso): sulla mappa toccandola vedi le immagini. Lascia vuoto se non c'è." />
+        <EntityField value={c.haEntity} domain="camera" name={c.label} onChange={(v) => st.updateCamera(c.id, { haEntity: v })} tip="Entità della telecamera in Home Assistant (es. camera.ingresso): sulla mappa toccandola vedi le immagini (o l'azione scelta in «Al tocco»). Lascia vuoto se non c'è." />
+        {c.haEntity && <TapField value={c.tap} def="more-info" onChange={(tap) => st.updateCamera(c.id, { tap })} />}
         <p className="muted small" style={{ margin: 0 }}>
           Vede circa <b>{seen.toFixed(1).replace('.', ',')} m²</b> della casa
         </p>
@@ -500,6 +563,7 @@ export function Properties() {
         <h3>💡 {l.label || 'Luce'}</h3>
         <RoomName value={l.label ?? ''} placeholder="es. Lampadario cucina" onChange={(label) => st.updateLight(l.id, { label: label || undefined })} />
         <EntityField value={l.entityId || undefined} domain="light" name={l.label} onChange={(v) => st.updateLight(l.id, { entityId: v ?? '' })} tip="Entità della luce in Home Assistant (es. light.cucina). Può essere anche un interruttore: switch.luce_bagno" />
+        <TapField value={l.tap} def="toggle" onChange={(tap) => st.updateLight(l.id, { tap })} />
         <Num tip="Altezza della lampada da terra: soffitto ~240-270, lampada da tavolo ~120" label="Altezza" value={l.z} onChange={(v) => st.updateLight(l.id, { z: Math.max(10, v) })} />
         <label className="prop" data-tip="Quanto è forte la luce nel render della mappa">
           <span>Intensità</span>
@@ -514,7 +578,7 @@ export function Properties() {
             </button>
           ))}
         </div>
-        <p className="muted small">Nella mappa di Home Assistant la stanza si illumina quando la luce è accesa, e toccandola la accendi o spegni.</p>
+        <p className="muted small">Nella mappa di Home Assistant la stanza si illumina quando la luce è accesa; toccando la luce o la stanza {l.tap && l.tap.action !== 'toggle' ? 'fai l\'azione scelta in «Al tocco»' : 'la accendi o spegni'}.</p>
         <button className="danger" onClick={() => st.deleteLight(l.id)}>
           Elimina
         </button>
@@ -553,6 +617,7 @@ export function Properties() {
                 : 'Entità del sensore in Home Assistant (es. sensor.temperatura_salotto): sulla mappa vedi il suo valore aggiornato'
           }
         />
+        <TapField value={x.tap} def="more-info" onChange={(tap) => st.updateSensor(x.id, { tap })} />
         {BINARY_SENSORS.includes(x.kind) && <p className="muted small">Puoi anche collegare il sensore direttamente alla porta o finestra: selezionala e scrivi l'entità in «Entità HA», così sulla mappa si colora l'apertura stessa.</p>}
         <button className="danger" onClick={() => st.deleteSensor(x.id)}>
           Elimina

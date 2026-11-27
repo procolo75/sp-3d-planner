@@ -44,6 +44,8 @@ export interface Opening {
   open?: number;
   /** Home Assistant: sensore di apertura collegato (es. binary_sensor.porta_ingresso) */
   haEntity?: string;
+  /** Home Assistant: cosa succede toccandola sulla mappa (default: info) */
+  tap?: TapAction;
 }
 
 export interface Item {
@@ -94,6 +96,24 @@ export interface Camera {
   label?: string;
   /** Home Assistant: entità della telecamera (es. camera.ingresso) */
   haEntity?: string;
+  /** Home Assistant: cosa succede toccandola sulla mappa (default: info) */
+  tap?: TapAction;
+}
+
+/** Azioni al tocco di ha-floorplan */
+export type TapActionKind = 'more-info' | 'toggle' | 'call-service' | 'navigate' | 'url' | 'none';
+
+/** Cosa succede toccando un elemento sulla mappa di Home Assistant */
+export interface TapAction {
+  action: TapActionKind;
+  /** more-info / toggle / call-service: un'altra entità (vuoto = quella dell'elemento) */
+  entity?: string;
+  /** call-service: es. script.buonanotte, cover.open_cover */
+  service?: string;
+  /** navigate: es. /lovelace/clima */
+  path?: string;
+  /** url: indirizzo da aprire */
+  url?: string;
 }
 
 /** Luce di casa collegata a Home Assistant: punto in pianta, altezza e colore della luce */
@@ -110,6 +130,8 @@ export interface Light {
   color: string;
   /** potenza relativa 0…1 */
   intensity: number;
+  /** Home Assistant: cosa succede toccandola sulla mappa (default: accendi/spegni) */
+  tap?: TapAction;
 }
 
 export type SensorKind = 'temperature' | 'humidity' | 'co2' | 'door' | 'window' | 'generic';
@@ -125,6 +147,8 @@ export interface Sensor {
   entityId: string;
   kind: SensorKind;
   label?: string;
+  /** Home Assistant: cosa succede toccandolo sulla mappa (default: info) */
+  tap?: TapAction;
 }
 
 export interface Background {

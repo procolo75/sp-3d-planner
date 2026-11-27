@@ -2,7 +2,8 @@
 // così gli id degli elementi SVG coincidono sempre con quelli usati nelle regole.
 import { add, mul, norm, perp, pointInPolygon, sub, type V } from '../model/geom';
 import type { Derived } from '../model/derived';
-import type { Project } from '../model/types';
+import type { Project, TapAction } from '../model/types';
+import { resolveTap } from './tap';
 import { entityFile, slugify, type HaEntities } from './entities';
 
 export type ToPixel = (x: number, y: number, z?: number) => V;
@@ -17,6 +18,8 @@ export interface LayoutLight {
   color: string;
   /** vista 2D: alone dentro la stanza */
   glow?: { r: number; clip?: V[] };
+  /** azione al tocco (già validata) */
+  tap: TapAction;
 }
 
 export interface LayoutArea {
@@ -25,6 +28,8 @@ export interface LayoutArea {
   points: V[];
   /** luce che si accende/spegne toccando la stanza */
   entity?: string;
+  /** azione al tocco: la stessa della sua luce */
+  tap?: TapAction;
 }
 
 export interface Layout {
@@ -37,9 +42,9 @@ export interface Layout {
   u: number;
   lights: LayoutLight[];
   areas: LayoutArea[];
-  sensors: { entityId: string; label: string; kind: string; at: V }[];
-  contacts: { entityId: string; points: V[] }[];
-  cameras: { entityId: string; label: string; at: V }[];
+  sensors: { entityId: string; label: string; kind: string; at: V; tap: TapAction }[];
+  contacts: { entityId: string; points: V[]; tap: TapAction }[];
+  cameras: { entityId: string; label: string; at: V; tap: TapAction }[];
 }
 
 /** quadrilatero dell'apertura: impronta in pianta (vista dall'alto / 2D) o faccia verticale (viste inclinate) */
@@ -75,6 +80,7 @@ export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: {
       file: `lights/${entityFile(l.entityId)}.png`,
       at: toPx(l.x, l.y, vertical ? l.z : 0),
       color: l.color,
+      tap: resolveTap(l.tap, 'toggle'),
       ...(frame.planar ? { glow: { r: 120 + 380 * l.intensity, clip: r ? (r.inner.length >= 3 ? r.inner : r.poly) : undefined } } : {}),
     };
   });
@@ -88,7 +94,7 @@ export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: {
     for (let k = 2; used.has(id); k++) id = `area.${slugify(name)}_${k}`;
     used.add(id);
     const light = ents.lights.find((l) => pointInPolygon(l, r.poly));
-    return { id, name, points: (r.inner.length >= 3 ? r.inner : r.poly).map((q) => toPx(q.x, q.y, 0)), entity: light?.entityId };
+    return { id, name, points: (r.inner.length >= 3 ? r.inner : r.poly).map((q) => toPx(q.x, q.y, 0)), entity: light?.entityId, tap: light ? resolveTap(light.tap, 'toggle') : undefined };
   });
 
   return {
@@ -99,8 +105,8 @@ export function buildLayout(p: Project, der: Derived, ents: HaEntities, frame: {
     u,
     lights,
     areas,
-    sensors: ents.sensors.map((s) => ({ entityId: s.entityId, label: s.label || '', kind: s.kind, at: toPx(s.x, s.y, 0) })),
-    contacts: ents.contacts.map((o) => ({ entityId: o.haEntity!, points: openingQuad(p, o.id, vertical, toPx) })).filter((c) => c.points.length),
-    cameras: ents.cameras.map((c) => ({ entityId: c.haEntity!, label: c.label || '', at: toPx(c.x, c.y, vertical ? c.z : 0) })),
+    sensors: ents.sensors.map((s) => ({ entityId: s.entityId, label: s.label || '', kind: s.kind, at: toPx(s.x, s.y, 0), tap: resolveTap(s.tap, 'more-info') })),
+    contacts: ents.contacts.map((o) => ({ entityId: o.haEntity!, points: openingQuad(p, o.id, vertical, toPx), tap: resolveTap(o.tap, 'more-info') })).filter((c) => c.points.length),
+    cameras: ents.cameras.map((c) => ({ entityId: c.haEntity!, label: c.label || '', at: toPx(c.x, c.y, vertical ? c.z : 0), tap: resolveTap(c.tap, 'more-info') })),
   };
 }

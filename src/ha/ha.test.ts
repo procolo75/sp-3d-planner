@@ -157,3 +157,45 @@ describe('file per ha-floorplan', () => {
     expect(strFromU8(z['floorplan/casa/casa.css'])).toContain('mix-blend-mode: plus-lighter');
   });
 });
+
+describe('azione al tocco', () => {
+  /** righe della regola che inizia con `- entity: <id>` e (se dato) `element: '<el>'` */
+  const rule = (y: string, entity: string, element?: string) =>
+    y.split('      - entity: ').find((r) => r.startsWith(entity + '\n') && (!element || r.includes(`element: '${element}'`))) ?? '';
+
+  it('predefinita: luci e stanze accendono/spengono, sensori e telecamere mostrano le info', () => {
+    const y = buildBundle(house(), '2d', 'casa').yaml;
+    expect(rule(y, 'light.cucina', 'light.cucina.marker')).toContain('action: toggle');
+    expect(rule(y, 'light.cucina', 'area.cucina')).toContain('action: toggle');
+    expect(rule(y, 'sensor.temp_cucina')).toContain('action: more-info');
+    expect(rule(y, 'camera.salotto')).toContain('action: more-info');
+    expect(rule(y, 'binary_sensor.porta')).toContain('action: more-info');
+  });
+  it('scelta per ogni elemento: pagina, link, servizio, niente, info di un\'altra entità', () => {
+    const p = house();
+    p.sensors!.s1.tap = { action: 'navigate', path: '/lovelace/clima' };
+    p.sensors!.s2.tap = { action: 'more-info', entity: 'climate.salotto' };
+    p.sensors!.s3.tap = { action: 'none' };
+    p.lights!.l2.tap = { action: 'call-service', service: 'script.buonanotte' };
+    p.cameras!.c1.tap = { action: 'url', url: 'https://example.com/cam' };
+    p.openings.d.tap = { action: 'toggle', entity: 'cover.porta' };
+    const y = buildBundle(p, '2d', 'casa').yaml;
+    expect(rule(y, 'sensor.temp_cucina')).toContain("action: navigate\n          navigation_path: '/lovelace/clima'");
+    // anche lo sfondo colorato dell'eCO2 usa la stessa azione
+    expect(rule(y, 'sensor.salotto_eco2', 'sensor.salotto_eco2.bg')).toContain('action: more-info\n          entity: climate.salotto');
+    expect(rule(y, 'binary_sensor.finestra_cucina', 'binary_sensor.finestra_cucina.bg')).toContain('tap_action: false');
+    for (const el of ['light.salotto.marker', 'area.salotto'])
+      expect(rule(y, 'light.salotto', el)).toContain('service: script.buonanotte\n          service_data:\n            entity_id: light.salotto');
+    expect(rule(y, 'camera.salotto')).toContain("action: url\n          url_path: 'https://example.com/cam'");
+    expect(rule(y, 'binary_sensor.porta')).toContain('service: homeassistant.toggle\n          service_data:\n            entity_id: cover.porta');
+  });
+  it('azione incompleta: avviso e torna alla predefinita', () => {
+    const p = house();
+    p.sensors!.s1.tap = { action: 'navigate' };
+    p.lights!.l1.tap = { action: 'call-service', service: 'non valido' };
+    expect(collectEntities(p).warnings.filter((w) => w.includes('azione al tocco'))).toHaveLength(2);
+    const y = buildBundle(p, '2d', 'casa').yaml;
+    expect(rule(y, 'sensor.temp_cucina')).toContain('action: more-info');
+    expect(rule(y, 'light.cucina', 'light.cucina.marker')).toContain('action: toggle');
+  });
+});

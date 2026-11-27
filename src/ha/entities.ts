@@ -2,6 +2,7 @@
 import { pointInPolygon } from '../model/geom';
 import type { Derived } from '../model/derived';
 import type { Camera, Light, Opening, Project, Sensor } from '../model/types';
+import { tapIssue } from './tap';
 
 const ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
 
@@ -65,6 +66,14 @@ export function collectEntities(p: Project, der?: Derived): HaEntities {
   const sensors = take(Object.values(p.sensors ?? {}), (s) => s.entityId, (s) => `Sensore «${s.label || 'senza nome'}»`);
   const contacts = take(Object.values(p.openings), (o) => o.haEntity, () => 'Apertura', true);
   const cameras = take(Object.values(p.cameras ?? {}), (c) => c.haEntity, (c) => `Telecamera «${c.label || 'senza nome'}»`, true);
+  const tapWarn = (what: string, x: { tap?: Parameters<typeof tapIssue>[0] }) => {
+    const issue = tapIssue(x.tap);
+    if (issue) warnings.push(`${what}: azione al tocco non valida (${issue}), uso quella predefinita`);
+  };
+  for (const l of lights) tapWarn(`Luce «${l.label || l.entityId}»`, l);
+  for (const s of sensors) tapWarn(`Sensore «${s.label || s.entityId}»`, s);
+  for (const o of contacts) tapWarn(`Apertura «${o.haEntity}»`, o);
+  for (const c of cameras) tapWarn(`Telecamera «${c.label || c.haEntity}»`, c);
   if (der) for (const l of lights) if (!der.rooms.some((r) => pointInPolygon(l, r.poly))) warnings.push(`Luce «${l.label || l.entityId}» è fuori da ogni stanza`);
   return { lights, sensors, contacts, cameras, warnings };
 }
