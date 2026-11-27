@@ -28,7 +28,7 @@ export interface CardOpts {
   image: string;
   stylesheet: string;
   withDay: boolean;
-  /** mappa della casa con le pagine delle stanze: id dell'area → pagina da aprire */
+  /** mappa della casa con le pagine delle stanze: id dell'area → pagina da aprire (relativa alla dashboard) */
   roomPaths?: Map<string, string>;
 }
 
@@ -125,24 +125,22 @@ const indent = (text: string, n: number) =>
     .map((l, i) => (i === 0 ? l : l ? ' '.repeat(n) + l : l))
     .join('\n');
 
-/** percorso della dashboard normalizzato: «dashboard-casa» → «/dashboard-casa», senza / finale */
-export const dashboardPath = (s: string) => '/' + s.trim().replace(/^\/+|\/+$/g, '');
-
 /** dashboard intera: pagina «Casa» con la mappa completa + una sottopagina per ogni stanza */
-export function buildDashboard(o: { title: string; dashboard: string; house: string; rooms: { name: string; slug: string; card: string }[] }) {
-  const d = dashboardPath(o.dashboard);
+export function buildDashboard(o: { title: string; house: string; rooms: { name: string; slug: string; card: string }[] }) {
   const view = (title: string, path: string, card: string, sub: boolean) =>
     [
       `  - title: ${q(title)}`,
       `    path: ${path}`,
-      ...(sub ? ['    subview: true', `    back_path: ${d}/casa`] : []),
+      // sottopagina: la freccia ← torna alla pagina precedente (la casa)
+      ...(sub ? ['    subview: true'] : []),
       '    panel: true',
       '    cards:',
       `      - ${indent(card, 8)}`,
     ].join('\n');
   return `# Dashboard generata da SP 3D Planner — «${o.title}»
-# Impostazioni → Dashboard → apri la dashboard (indirizzo ${d}) → ✏️ Modifica
+# Impostazioni → Dashboard → crea o apri una dashboard (il nome è libero) → ✏️ Modifica
 # → ⋮ → «Editor di configurazione raw», sostituisci tutto con questo testo e salva.
+# NON va in una card Manuale (darebbe «No card type configured»).
 title: ${q(o.title)}
 views:
 ${[view(o.title, 'casa', o.house, false), ...o.rooms.map((r) => view(r.name, r.slug, r.card, true))].join('\n')}

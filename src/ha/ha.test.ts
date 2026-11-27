@@ -228,7 +228,7 @@ describe('una pagina per ogni stanza', () => {
 
   it('3D: file per stanza, solo le sue entità, dashboard con le sottopagine', () => {
     const p = house();
-    const b = buildBundle(p, 'iso', 'casa', fakeRender(p, 'iso'), { dashboard: 'dashboard-casa', rooms: roomRenders(p, 'iso') });
+    const b = buildBundle(p, 'iso', 'casa', fakeRender(p, 'iso'), { perRoom: true, rooms: roomRenders(p, 'iso') });
     expect(b.rooms.map((r) => r.slug).sort()).toEqual(['cucina', 'salotto']);
     expect(b.files['rooms/cucina/cucina.svg']).toBeDefined();
     expect(b.files['rooms/cucina/base.png']).toBeInstanceOf(Uint8Array);
@@ -246,31 +246,32 @@ describe('una pagina per ogni stanza', () => {
     const y = b.yaml;
     expect(y).toContain('views:');
     expect(y).toContain('    path: casa');
-    expect(y).toContain('    path: cucina\n    subview: true\n    back_path: /dashboard-casa/casa');
+    expect(y).toContain('    path: cucina\n    subview: true\n    panel: true');
+    expect(y).not.toContain('back_path');
     expect(y).toContain('image: /local/floorplan/casa/rooms/cucina/cucina.svg');
     expect(y).toContain('stylesheet: /local/floorplan/casa/casa.css');
     // mappa della casa: tocco = apre la stanza, tieni premuto = la luce
-    expect(y).toMatch(/- element: 'area\.cucina'\n\s+tap_action:\n\s+action: navigate\n\s+navigation_path: '\/dashboard-casa\/cucina'\n\s+hold_action:\n\s+action: call-service\n\s+service: homeassistant\.toggle\n\s+service_data:\n\s+entity_id: light\.cucina/);
+    expect(y).toMatch(/- element: 'area\.cucina'\n\s+tap_action:\n\s+action: navigate\n\s+navigation_path: 'cucina'\n\s+hold_action:\n\s+action: call-service\n\s+service: homeassistant\.toggle\n\s+service_data:\n\s+entity_id: light\.cucina/);
     // nella mappa della casa l'area non ha «entity» (solo nelle pagine delle stanze)
     expect(y.split('\n  - title:')[1]).not.toContain("element: 'area.cucina'\n                tap_action:\n                  action: toggle");
   });
 
   it('YAML della dashboard indentato correttamente', () => {
     const p = house();
-    const y = buildBundle(p, '2d', 'casa', undefined, { dashboard: '/dashboard-casa/' }).yaml;
+    const y = buildBundle(p, '2d', 'casa', undefined, { perRoom: true }).yaml;
     expect(y).toContain('      - type: custom:floorplan-card\n');
     expect(y).toContain('\n        full_height: true\n');
     expect(y).toContain('\n        config:\n          image: /local/floorplan/casa/casa.svg');
     expect(y).toContain('\n          rules:\n');
     expect(y).toContain('\n              - entity: light.cucina\n                element:');
     // 2D: la stanza è la stessa pianta ritagliata, senza PNG
-    expect(Object.keys(buildBundle(p, '2d', 'casa', undefined, { dashboard: 'd' }).files).some((f) => f.endsWith('.png'))).toBe(false);
+    expect(Object.keys(buildBundle(p, '2d', 'casa', undefined, { perRoom: true }).files).some((f) => f.endsWith('.png'))).toBe(false);
   });
 
   it('stanza senza luce: si apre lo stesso, con una regola solo «element»', () => {
     const p = house();
     delete p.lights!.l2;
-    const y = buildBundle(p, '2d', 'casa', undefined, { dashboard: 'dashboard-casa' }).yaml;
+    const y = buildBundle(p, '2d', 'casa', undefined, { perRoom: true }).yaml;
     expect(y).toContain("              - element: 'area.salotto'\n                tap_action:\n                  action: navigate");
   });
 

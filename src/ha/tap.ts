@@ -18,7 +18,7 @@ export function tapIssue(t: TapAction | undefined): string | undefined {
   if (!t) return undefined;
   if (t.entity && !ID_RE.test(t.entity)) return `«${t.entity}» non è un entity_id valido`;
   if (t.action === 'call-service' && !ID_RE.test(t.service ?? '')) return t.service ? `«${t.service}» non è un servizio valido (es. script.buonanotte)` : 'manca il servizio da eseguire';
-  if (t.action === 'navigate' && !(t.path ?? '').startsWith('/')) return t.path ? `il percorso «${t.path}» deve iniziare con / (es. /lovelace/clima)` : 'manca la pagina da aprire';
+  if (t.action === 'navigate' && !(t.path ?? '').trim()) return 'manca la pagina da aprire';
   if (t.action === 'url' && !/^https?:\/\/\S+$/.test(t.url ?? '')) return t.url ? `«${t.url}» non è un link valido (deve iniziare con https://)` : 'manca il link da aprire';
   return undefined;
 }

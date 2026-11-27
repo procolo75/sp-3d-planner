@@ -72,13 +72,17 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
           return c2.toDataURL('image/png');
         };
         try {
-        // le luci si calcolano sempre rispetto al buio: così danno tutto il loro contributo
-        // (senza ombreggiatura negli angoli, come i render delle lampade, così la differenza è solo la luce)
-        const nightUrl = await shot('Render della casa al buio…', 'night');
-        const basePx = pixels().data;
-        let baseUrl = nightUrl;
+        // Il render al buio (senza ombreggiatura negli angoli, come quelli delle lampade) serve come riferimento per calcolare la luce di ogni lampada (acceso − buio).
+        // Con «sempre chiara» e senza lampade da calcolare (molte stanze) si salta.
+        const needDark = look !== 'bright' || lights.length > 0;
+        let basePx = new Uint8ClampedArray(0);
+        let baseUrl = '';
+        if (needDark) {
+          baseUrl = await shot(look === 'bright' ? 'Riferimento al buio per le luci…' : 'Render della casa di notte…', 'night');
+          basePx = pixels().data;
+        }
         if (look === 'bright') baseUrl = await shot('Render della casa…', 'bright', { ao: true });
-        else if (!high) baseUrl = await shot('Render della casa al buio…', 'night', { ao: true });
+        else if (!high) baseUrl = await shot('Render della casa di notte…', 'night', { ao: true });
         /** solo la luce aggiunta dalla lampada (acceso − buio), da sommare alla base: si vede sia di notte sia sull'immagine di giorno */
         // ritaglio sulla stanza della lampada: pavimento, soffitto e pareti (il «prisma» della stanza visto dalla camera)
         const rooms = derive(p).rooms;

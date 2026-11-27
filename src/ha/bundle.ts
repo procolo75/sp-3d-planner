@@ -7,7 +7,7 @@ import { collectEntities, type HaEntities } from './entities';
 import { buildLayout, mapRooms, type Layout } from './layout';
 import { buildCss } from './css';
 import { buildSvg2D, buildSvg3D } from './svg';
-import { buildCard, buildDashboard, buildYaml, dashboardPath } from './yaml';
+import { buildCard, buildDashboard, buildYaml } from './yaml';
 import { VIEW_NAMES, type HaView } from './views';
 
 export interface Rendered {
@@ -40,8 +40,8 @@ export interface RoomMap {
 }
 
 export interface BundleOpts {
-  /** una pagina per stanza: indirizzo della dashboard in Home Assistant (es. /dashboard-casa) */
-  dashboard?: string;
+  /** una pagina per stanza: lo YAML diventa la dashboard intera (casa + sottopagine) */
+  perRoom?: boolean;
   /** viste 3D: render di ogni stanza, per slug della stanza */
   rooms?: Map<string, Rendered>;
 }
@@ -90,7 +90,7 @@ export function buildBundle(p: Project, view: HaView, slug: string, r?: Rendered
   const files = house.files;
   const css = `${base}${slug}.css`;
   const rooms: RoomMap[] = [];
-  if (o.dashboard) {
+  if (o.perRoom) {
     for (const a of mapRooms(der, ents)) {
       const rr = view === '2d' ? undefined : o.rooms?.get(a.slug);
       if (view !== '2d' && !rr) continue;
@@ -102,12 +102,12 @@ export function buildBundle(p: Project, view: HaView, slug: string, r?: Rendered
     }
   }
   let yaml: string;
-  if (o.dashboard) {
-    const d = dashboardPath(o.dashboard);
-    const roomPaths = new Map(rooms.map((x) => [x.areaId, `${d}/${x.slug}`]));
+  if (o.perRoom) {
+    // percorso relativo: ha-floorplan fa history.pushState, quindi da /<dashboard>/casa porta a /<dashboard>/<stanza>
+    // qualunque sia il nome dato alla dashboard in Home Assistant
+    const roomPaths = new Map(rooms.map((x) => [x.areaId, x.slug]));
     yaml = buildDashboard({
       title: p.name || slug,
-      dashboard: d,
       house: buildCard(house.layout, { image: `${base}${slug}.svg`, stylesheet: css, withDay, roomPaths }),
       rooms: rooms.map((x) => ({ name: x.name, slug: x.slug, card: buildCard(x.layout, { image: `${base}${x.dir}${x.slug}.svg`, stylesheet: css, withDay: view !== '2d' && !!o.rooms?.get(x.slug)?.day }) })),
     });
@@ -115,7 +115,7 @@ export function buildBundle(p: Project, view: HaView, slug: string, r?: Rendered
   files[`${slug}.svg`] = house.svg;
   files[`${slug}.css`] = buildCss(view);
   files[`${slug}.yaml`] = yaml;
-  files['LEGGIMI.txt'] = readme(p, view, slug, ents.warnings, o.dashboard ? dashboardPath(o.dashboard) : undefined, rooms.length);
+  files['LEGGIMI.txt'] = readme(p, view, slug, ents.warnings, !!o.perRoom, rooms.length);
   return { files, layout: house.layout, yaml, rooms };
 }
 
@@ -129,7 +129,7 @@ export function zipBundle(slug: string, files: Record<string, string | Uint8Arra
   return zipSync(z);
 }
 
-function readme(p: Project, view: HaView, slug: string, warnings: string[], dashboard?: string, nRooms = 0) {
+function readme(p: Project, view: HaView, slug: string, warnings: string[], perRoom = false, nRooms = 0) {
   return `Mappa di Home Assistant per «${p.name || slug}» — ${VIEW_NAMES[view]}
 Creata con SP 3D Planner il ${new Date().toLocaleString('it-IT')}.
 
@@ -140,9 +140,9 @@ INSTALLAZIONE
    (deve risultare /config/www/floorplan/${slug}/${slug}.svg).
    Se la cartella /config/www non esisteva, riavvia Home Assistant.
 ${
-    dashboard
-      ? `3. Crea la dashboard: Impostazioni → Dashboard → Aggiungi dashboard → «Nuova dashboard da zero».
-   Il suo indirizzo deve essere ${dashboard} (lo vedi nella barra del browser quando la apri).
+    perRoom
+      ? `3. Crea la dashboard: Impostazioni → Dashboard → Aggiungi dashboard → «Nuova dashboard da zero»
+   (il nome è libero).
    Aprila → ✏️ Modifica → ⋮ → «Editor di configurazione raw», sostituisci tutto
    con il contenuto di ${slug}.yaml e salva.`
       : `3. Apri la dashboard → ✏️ Modifica → Aggiungi card → Manuale,
@@ -153,7 +153,7 @@ ${
 
 COSA FA
 ${
-    dashboard
+    perRoom
       ? `- Stanze: toccandone una si apre la sua mappa (${nRooms} pagine, con la freccia ← per tornare alla casa);
   tenendola premuta accendi/spegni la sua luce.
 - Luci: la stanza si illumina quando la luce è accesa; il pallino giallo la accende/spegne.`

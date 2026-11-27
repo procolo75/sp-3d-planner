@@ -5,7 +5,6 @@ import { derive } from '../model/derived';
 import { collectEntities, slugify } from '../ha/entities';
 import { buildBundle, haBase, zipBundle, type BundleFiles, type Rendered } from '../ha/bundle';
 import { mapRooms } from '../ha/layout';
-import { dashboardPath } from '../ha/yaml';
 import { pointInPolygon } from '../model/geom';
 import { buildCss } from '../ha/css';
 import { HaCaptureCanvas, type CaptureApi, type HaLook, type HaQuality } from '../ha/HaCaptureCanvas';
@@ -108,9 +107,6 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
   const [slug, setSlug] = useState(() => slugify(project.name || 'casa'));
   /** una pagina per stanza: toccando la stanza sulla mappa della casa si apre la sua */
   const [perRoom, setPerRoom] = useState(true);
-  // indirizzo della dashboard in HA, ricordato per cartella (es. /dashboard-floorplan2)
-  const [dashboard, setDashboard] = useState(() => localStorage.getItem(`planner:ha-dashboard:${slugify(slug)}`) ?? '');
-  const dash = dashboardPath(dashboard || `dashboard-${slugify(slug)}`);
   const [busy, setBusy] = useState('');
   /** anteprime: casa (chiave '') e stanze (slug) */
   const [result, setResult] = useState<{ bundle: BundleFiles; docs: Map<string, string>; view: HaView } | null>(null);
@@ -162,7 +158,7 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
     setResult(null);
     try {
       let bundle: BundleFiles;
-      const opts = rooms ? { dashboard: dash, rooms: new Map<string, Rendered>() } : {};
+      const opts = rooms ? { perRoom: true, rooms: new Map<string, Rendered>() } : {};
       if (view === '2d') bundle = buildBundle(project, view, s, undefined, opts);
       else {
         if (!api.current) throw new Error('la scena 3D non è ancora pronta, riprova tra un attimo');
@@ -352,17 +348,6 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
             )}
             {rooms && (
               <>
-                <label className="prop" data-tip="Indirizzo della dashboard in Home Assistant: crea una dashboard nuova (Impostazioni → Dashboard → Aggiungi) e copia qui la parte dell'indirizzo dopo il nome del server, es. /dashboard-casa">
-                  <span>Dashboard</span>
-                  <input value={dashboard} placeholder={dash} onChange={(e) => setDashboard(e.target.value)} onBlur={() => {
-                      const d = dashboard.trim() ? dashboardPath(dashboard) : '';
-                      setDashboard(d);
-                      localStorage.setItem(`planner:ha-dashboard:${slugify(slug)}`, d);
-                    }} />
-                </label>
-                <p className="muted small" style={{ margin: 0 }}>
-                  → pagine <code>{dash}/casa</code>, <code>{dash}/{roomList[0].slug}</code>…
-                </p>
                 {view !== '2d' && selRoom && (
                   <div className="ha-room-view">
                     <label className="prop" data-tip="Scegli la stanza e trascinala qui sotto per decidere da dove guardarla nella sua pagina">
