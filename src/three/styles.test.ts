@@ -64,3 +64,31 @@ describe('stili della scena 3D', () => {
     expect(wall.material).toBe(orig);
   });
 });
+
+describe('texture del Realistico', () => {
+  it('UV in metri proiettate sulla faccia dominante', async () => {
+    const { boxUV } = await import('./textures');
+    const g = new THREE.BoxGeometry(2, 1, 4);
+    boxUV(g);
+    const uv = g.getAttribute('uv');
+    const pos = g.getAttribute('position');
+    const nor = g.getAttribute('normal');
+    for (let i = 0; i < pos.count; i++)
+      if (Math.abs(nor.getY(i)) > 0.9) {
+        expect(uv.getX(i)).toBeCloseTo(pos.getX(i));
+        expect(uv.getY(i)).toBeCloseTo(pos.getZ(i));
+      }
+  });
+
+  it('pavimenti e mobili: il materiale giusto dal nome della stanza e dal colore', async () => {
+    const { floorSurface, partSurface } = await import('./textures');
+    expect(floorSurface('Bagno')).toBe('tiles');
+    expect(floorSurface('Cucina')).toBe('tiles');
+    expect(floorSurface('Balcone')).toBe('stone');
+    expect(floorSurface('garage')).toBe('concrete');
+    expect(floorSurface('Camera 1')).toBe('parquet');
+    expect(partSurface('#8b5a2b', false, false)).toBe('wood');
+    expect(partSurface('#7a8a9a', false, false)).toBe('fabric');
+    expect(partSurface('#b8bcc0', true, false)).toBeNull();
+  });
+});

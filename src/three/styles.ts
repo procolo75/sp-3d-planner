@@ -1,6 +1,7 @@
 // Stili di resa della scena 3D (vista principale, anteprime e render per Home Assistant).
 // Lo stile si applica sopra la scena così com'è: i materiali originali restano da parte e tornano con «normale».
 import * as THREE from 'three';
+import { boxUV, partSurface, surfaceTextures, type Surface } from './textures';
 
 export type RenderStyle = 'normale' | 'plastico' | 'disegno' | 'blueprint' | 'realistico';
 
@@ -31,6 +32,8 @@ interface StyledData {
   styleEdge?: boolean;
   /** le mesh con questo flag non vengono toccate (es. aloni, segnaposto) */
   noStyle?: boolean;
+  /** superficie per le texture del Realistico: pavimento, muro o «mobile» (il materiale si deduce dal colore) */
+  surface?: Surface | 'furniture';
 }
 
 const cache = new Map<string, THREE.Material>();
@@ -47,6 +50,28 @@ const isStyleMaterial = (m: Mat) => (Array.isArray(m) ? m.length > 0 && m.every(
 
 const colorOf = (m: THREE.Material) => ((m as THREE.MeshStandardMaterial).color ? (m as THREE.MeshStandardMaterial).color.getHexString() : 'ffffff');
 const isGlass = (m: THREE.Material) => m.transparent && m.opacity < 0.8;
+
+/** Realistico: lo stesso materiale con texture vere (parquet, piastrelle, intonaco, legno, tessuto) */
+function textured(m: THREE.Material, surface: StyledData['surface']): THREE.Material {
+  const sm = m as THREE.MeshStandardMaterial;
+  if (!surface || !sm.isMeshStandardMaterial || isGlass(m)) return m;
+  const s = surface === 'furniture' ? partSurface('#' + sm.color.getHexString(), sm.metalness > 0.3, m.transparent) : surface;
+  if (!s) return m;
+  const t = surfaceTextures(s);
+  if (!t) return m;
+  const key = `r-${s}-${sm.color.getHexString()}-${m.side}-${sm.polygonOffset ? sm.polygonOffsetFactor : ''}`;
+  return cached(key, () => {
+    const out = sm.clone();
+    out.map = t.map;
+    out.normalMap = t.normalMap;
+    out.normalScale.set(t.normalScale, t.normalScale);
+    out.roughnessMap = t.roughnessMap;
+    // la mappa scurisce un po' il colore: lo si compensa per restare vicini a quello scelto
+    out.color.multiplyScalar(s === 'parquet' || s === 'stone' ? 1.12 : 1.04);
+    out.roughness = 1;
+    return out;
+  });
+}
 
 /** materiale dello stile per un materiale originale */
 function styled(m: THREE.Material, style: RenderStyle): THREE.Material {
@@ -90,22 +115,25 @@ function removeEdges(mesh: THREE.Object3D) {
  * `lit`: materiali che devono reagire alla luce anche in Blueprint (render delle lampade per HA).
  */
 export function applyStyle(root: THREE.Object3D, style: RenderStyle, o: { lit?: boolean } = {}) {
-  const want: RenderStyle = style === 'realistico' ? 'normale' : style === 'blueprint' && o.lit ? 'plastico' : style;
+  const want: RenderStyle = style === 'blueprint' && o.lit ? 'plastico' : style;
   const key = (want + (style === 'blueprint' && o.lit ? '+lit' : '')) as RenderStyle;
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     const ud = mesh.userData as StyledData;
     if (!mesh.isMesh || ud.styleEdge || ud.noStyle) return;
+    // anche quando React cambia solo la geometria (muro modificato), le texture vogliono le UV in metri
+    if (want === 'realistico' && ud.surface) boxUV(mesh.geometry);
     if (ud.style === key) {
       // già a posto, a meno che React non abbia rimesso un materiale suo (quello nuovo è il nuovo originale)
-      if (want === 'normale' || isStyleMaterial(mesh.material)) return;
+      if (isStyleMaterial(mesh.material) || mesh.material === ud.origMaterial) return;
       ud.origMaterial = mesh.material;
     } else if (ud.origMaterial === undefined || !isStyleMaterial(mesh.material)) ud.origMaterial = mesh.material;
     removeEdges(mesh);
     const orig = ud.origMaterial;
     if (want === 'normale') mesh.material = orig;
+    else if (want === 'realistico') mesh.material = Array.isArray(orig) ? orig.map((m) => textured(m, ud.surface)) : textured(orig, ud.surface);
     else mesh.material = Array.isArray(orig) ? orig.map((m) => styled(m, want)) : styled(orig, want);
-    if (want !== 'normale') addEdges(mesh, style === 'blueprint' && o.lit ? 'normale' : want);
+    if (want !== 'normale' && want !== 'realistico') addEdges(mesh, style === 'blueprint' && o.lit ? 'normale' : want);
     ud.style = key;
   });
 }

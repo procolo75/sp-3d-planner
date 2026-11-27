@@ -829,8 +829,13 @@ export function Editor2D() {
         {selWall && project.walls[selWall] && <WallDims p={project} wallId={selWall} der={der} z={z} />}
 
         {/* nodi */}
-        {tool === 'select' &&
-          Object.values(project.nodes).map((n) => <circle key={n.id} cx={n.x} cy={n.y} r={fs(selection?.kind === 'node' && selection.id === n.id ? 5 : 3)} fill="#fff" stroke="#2f7de1" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />)}
+        {tool === 'select' && (
+          <g data-noexport>
+            {Object.values(project.nodes).map((n) => (
+              <circle key={n.id} cx={n.x} cy={n.y} r={fs(selection?.kind === 'node' && selection.id === n.id ? 5 : 3)} fill="#fff" stroke="#2f7de1" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            ))}
+          </g>
+        )}
 
         {/* punti di aggancio: estremi e metà dei muri */}
         {tool === 'wall' &&
@@ -881,13 +886,15 @@ export function Editor2D() {
         ))}
         {cameraGhost && <CameraSymbol c={cameraGhost.c} z={z} selected={false} ghost />}
 
-        {/* luci e sensori di Home Assistant */}
-        {Object.values(project.lights ?? {}).map((l) => (
-          <LightSymbol key={l.id} l={l} z={z} selected={selection?.kind === 'light' && selection.id === l.id} />
-        ))}
-        {Object.values(project.sensors ?? {}).map((x) => (
-          <SensorSymbol key={x.id} s={x} z={z} selected={selection?.kind === 'sensor' && selection.id === x.id} />
-        ))}
+        {/* luci e sensori di Home Assistant (non finiscono nella pianta da stampare) */}
+        <g data-noexport>
+          {Object.values(project.lights ?? {}).map((l) => (
+            <LightSymbol key={l.id} l={l} z={z} selected={selection?.kind === 'light' && selection.id === l.id} />
+          ))}
+          {Object.values(project.sensors ?? {}).map((x) => (
+            <SensorSymbol key={x.id} s={x} z={z} selected={selection?.kind === 'sensor' && selection.id === x.id} />
+          ))}
+        </g>
 
         {roi && (
           <rect x={Math.min(roi.a.x, roi.b.x)} y={Math.min(roi.a.y, roi.b.y)} width={Math.abs(roi.a.x - roi.b.x)} height={Math.abs(roi.a.y - roi.b.y)} fill="#2f7de1" fillOpacity={0.08} stroke="#2f7de1" strokeDasharray="6 4" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
@@ -1091,7 +1098,11 @@ function Grid({ view, size }: { view: View; size: { w: number; h: number } }) {
   const lines: React.ReactElement[] = [];
   for (let x = Math.floor(x0 / step) * step; x <= x1; x += step) lines.push(<line key={'x' + x} x1={x} y1={y0} x2={x} y2={y1} stroke={x % major === 0 ? '#d5d9df' : '#eceef1'} strokeWidth={1} vectorEffect="non-scaling-stroke" />);
   for (let y = Math.floor(y0 / step) * step; y <= y1; y += step) lines.push(<line key={'y' + y} x1={x0} y1={y} x2={x1} y2={y} stroke={y % major === 0 ? '#d5d9df' : '#eceef1'} strokeWidth={1} vectorEffect="non-scaling-stroke" />);
-  return <g style={{ pointerEvents: 'none' }}>{lines}</g>;
+  return (
+    <g style={{ pointerEvents: 'none' }} data-noexport>
+      {lines}
+    </g>
+  );
 }
 
 function OpeningSymbol({ p, o, selected, ghost }: { p: Project; o: Opening; selected?: boolean; ghost?: boolean }) {

@@ -1,10 +1,10 @@
 // Effetti della vista 3D: luci di scena (giorno/sera), lampade simulate, ombreggiatura negli angoli e path tracing.
-import { useFrame, useThree } from '@react-three/fiber';
+import { addAfterEffect, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { WebGLPathTracer } from 'three-gpu-pathtracer';
 import { useStore } from '../model/store';
-import { lamp, makeAoComposer, PT_LAMP_SCALE, ptSkies, rig } from '../ha/renderEngine';
+import { addDenoise, lamp, makeAoComposer, PT_LAMP_SCALE, ptSkies, rig } from '../ha/renderEngine';
 
 /** luci di scena: di giorno come sempre, di sera quelle delle mappe di Home Assistant */
 export function SceneLights({ evening, shadows }: { evening: boolean; shadows: boolean }) {
@@ -64,6 +64,32 @@ export function AOEffect() {
   return null;
 }
 
+/** richiesta di foto della vista: il path tracer, anche se ha finito, ridisegna un fotogramma */
+const snapRequest = { pending: false };
+
+/**
+ * Foto della vista 3D (evento `planner:snap3d`): l'immagine si legge subito dopo il prossimo fotogramma
+ * disegnato, quando il contenuto del canvas è ancora valido.
+ */
+export function SnapshotHandler() {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const h = (e: Event) => {
+      const { res, rej } = (e as CustomEvent<{ res: (b: Blob) => void; rej: (e: Error) => void }>).detail;
+      e.preventDefault();
+      snapRequest.pending = true;
+      const unsub = addAfterEffect(() => {
+        unsub();
+        snapRequest.pending = false;
+        gl.domElement.toBlob((b) => (b ? res(b) : rej(new Error('immagine non disponibile'))), 'image/png');
+      });
+    };
+    window.addEventListener('planner:snap3d', h);
+    return () => window.removeEventListener('planner:snap3d', h);
+  }, [gl]);
+  return null;
+}
+
 /** campioni dopo i quali l'immagine si considera finita */
 const PT_MAX = 300;
 
@@ -90,6 +116,7 @@ export function PathTraceView({ evening, label }: { evening: boolean; label?: Re
     p.tiles.set(2, 2);
     return p;
   }, [gl]);
+  useEffect(() => addDenoise(pt), [pt]);
   useEffect(
     () => () => {
       pt.dispose();
@@ -164,7 +191,7 @@ export function PathTraceView({ evening, label }: { evening: boolean; label?: Re
       st.dirty = st.lightsDirty = st.moving = false;
       pt.reset();
     }
-    if (pt.samples < PT_MAX) {
+    if (pt.samples < PT_MAX || snapRequest.pending) {
       pt.renderSample();
       if (label?.current) label.current.textContent = `✨ ${Math.floor(pt.samples)}/${PT_MAX}`;
     } else if (label?.current) label.current.textContent = '✨ pronto';

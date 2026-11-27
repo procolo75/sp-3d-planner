@@ -212,7 +212,8 @@ Pulsanti in alto a destra della vista 3D:
   - *Plastico*: modellino tutto chiaro, con gli angoli ombreggiati;
   - *Disegno*: colori piatti e contorni neri;
   - *Blueprint*: progetto tecnico blu con linee chiare;
-  - *✨ Realistico*: quando ti fermi l'immagine diventa fotorealistica in qualche secondo (luce che rimbalza, ombre morbide); quando giri torna fluida. In alto vedi l'avanzamento (es. ✨ 120/300);
+  - *✨ Realistico*: quando ti fermi l'immagine diventa fotorealistica in qualche secondo (luce che rimbalza, ombre morbide, un filtro che toglie la grana); quando giri torna fluida. In alto vedi l'avanzamento (es. ✨ 120/300). Le superfici hanno texture vere, con il colore che hai scelto: parquet nelle stanze, piastrelle in bagno e cucina, pietra su balconi e verande, cemento in garage e ripostiglio, intonaco sui muri, legno e tessuto sui mobili (dal loro colore);
+- **📷 Immagine**: salva la vista 3D così come la vedi in un file PNG (con Realistico aspetta «✨ pronto»). Più grande è la vista (es. solo 3D), più grande è l'immagine;
 - **🚶 Passeggiata**: cammini dentro casa.
 
 **Simulazione delle luci**: clicca il pallino giallo di una luce nella vista 3D per accenderla o spegnerla. Basta una luce accesa e la casa passa alla luce serale, così vedi come illumina la stanza. **🌙 Spegni luci** le spegne tutte e torna il giorno. È solo una simulazione: non comanda le luci di Home Assistant. Per modificare una luce (nome, entità, colore) selezionala nella pianta 2D.
@@ -226,7 +227,9 @@ Pulsanti in alto a destra della vista 3D:
 
 ## 10. Salvare e aprire i progetti
 
-I comandi sono nel menu **File** in alto (come in un'applicazione); il pulsante **💾 Salva** resta sempre a vista. Gli altri menu: **Modifica** (annulla, ripeti, blocca spostamenti), **Pianta** (correggi scala, pianta sotto e sua trasparenza) e **Vista** (2D, 3D, quote, copertura telecamere).
+I comandi sono nel menu **File** in alto (come in un'applicazione); il pulsante **💾 Salva** resta sempre a vista. Il primo «Salva» dopo aver aperto la pagina chiede sempre dove salvare (già col nome del file usato l'ultima volta); i successivi sovrascrivono quel file.
+
+**Immagini e stampa** (menu **File**): *Salva pianta come immagine* (PNG ad alta risoluzione, senza griglia, pallini e simboli di luci e sensori: va bene anche per un A3), *Salva vista 3D come immagine*, *Stampa pianta* e *Stampa vista 3D* (un foglio A4 adattato alla pagina, con il nome del progetto; dalla finestra di stampa puoi anche salvarla in PDF). Gli altri menu: **Modifica** (annulla, ripeti, blocca spostamenti), **Pianta** (correggi scala, pianta sotto e sua trasparenza) e **Vista** (2D, 3D, quote, copertura telecamere).
 
 | Comando | Cosa fa |
 |---|---|

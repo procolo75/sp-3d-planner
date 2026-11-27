@@ -27,6 +27,9 @@ const pickerTypes = [{ description: 'Progetto SP 3D Planner', accept: { 'applica
 /** file collegato al progetto aperto (per «Salva su PC» senza richiedere ogni volta) */
 let currentHandle: WritableHandle | null = null;
 let currentFileName: string | null = null;
+/** il file è stato scelto (o aperto) in questa sessione? Un file ricordato da una sessione precedente
+ *  si conferma con «Salva con nome» al primo salvataggio, così non si sovrascrive niente a sorpresa */
+let confirmedThisSession = false;
 
 const HANDLE_KEY = 'planner3d:fileHandle';
 
@@ -34,6 +37,7 @@ const HANDLE_KEY = 'planner3d:fileHandle';
 async function remember(projectId: string | undefined, handle: WritableHandle | null, fileName: string | null) {
   currentHandle = handle;
   currentFileName = fileName;
+  confirmedThisSession = !!handle;
   try {
     await set(HANDLE_KEY, handle && projectId ? { projectId, handle, fileName } : null);
   } catch {
@@ -96,13 +100,9 @@ export async function saveToPC(askWhere = false): Promise<SaveResult> {
   try {
     const w = window as Win;
     if (w.showSaveFilePicker) {
-      // il file ricordato può richiedere di nuovo il permesso di scrittura (dopo un ricaricamento)
-      if (!askWhere && currentHandle?.queryPermission && (await currentHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-        const r = await currentHandle.requestPermission?.({ mode: 'readwrite' });
-        if (r !== 'granted') currentHandle = null;
-      }
       let handle = currentHandle;
-      if (askWhere || !handle) {
+      if (askWhere || !handle || !confirmedThisSession) {
+        // il selettore va aperto subito, prima di ogni altra attesa: il browser lo permette solo durante il clic
         handle = await w.showSaveFilePicker({ suggestedName: currentFileName ?? fileNameFor(p), types: pickerTypes });
         // il nome del file diventa il nome del progetto, se non ne aveva uno vero
         if (!p.name || /^nuovo progetto$/i.test(p.name.trim())) p = { ...p, name: projectNameFromFile(handle.name) };
@@ -123,7 +123,9 @@ export async function saveToPC(askWhere = false): Promise<SaveResult> {
     return { ok: true, fileName, where: 'download' };
   } catch (e) {
     if ((e as Error).name === 'AbortError') return { ok: false, cancelled: true };
-    return { ok: false, cancelled: false, error: (e as Error).message };
+    // file spostato, cancellato o senza permesso: la prossima volta si sceglie di nuovo dove salvare
+    confirmedThisSession = false;
+    return { ok: false, cancelled: false, error: (e as Error).message + ' — riprova: ti chiederò dove salvare.' };
   }
 }
 

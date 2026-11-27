@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ProjectsDialog } from './ProjectsDialog';
 import { currentFile, openFromPC, saveToPC } from '../model/pcFiles';
 import { notify } from './Notice';
+import { snap3d, snapPlan } from './imageExport';
 
 async function savePC(askWhere: boolean) {
   const r = await saveToPC(askWhere);
@@ -92,6 +93,11 @@ export function Toolbar() {
         { sep: true },
         { label: fileName ? `Salva («${fileName}»)` : 'Salva su PC…', icon: '💾', keys: `${MOD}S`, onClick: () => savePC(false) },
         { label: 'Salva con nome…', keys: `⇧${MOD}S`, onClick: () => savePC(true), tip: 'Salva in un nuovo file (es. una variante del progetto), scegliendo cartella e nome' },
+        { sep: true },
+        { label: 'Salva pianta come immagine…', icon: '🖼', onClick: () => snapPlan(false), tip: 'La pianta 2D in un\'immagine PNG ad alta risoluzione (senza griglia), buona da stampare anche in A3' },
+        { label: 'Salva vista 3D come immagine…', icon: '📷', onClick: () => snap3d(false), tip: 'La vista 3D così come la vedi, con lo stile scelto. Con Realistico aspetta «✨ pronto»' },
+        { label: 'Stampa pianta…', icon: '🖨', onClick: () => snapPlan(true), tip: 'Stampa la pianta 2D su un foglio A4, adattata alla pagina (o salvala in PDF dalla finestra di stampa)' },
+        { label: 'Stampa vista 3D…', icon: '🖨', onClick: () => snap3d(true), tip: 'Stampa la vista 3D così come la vedi (o salvala in PDF dalla finestra di stampa)' },
         { sep: true },
         {
           label: 'Mappa per Home Assistant…',

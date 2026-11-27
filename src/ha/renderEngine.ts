@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { N8AOPass } from 'n8ao';
-import { GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
+import { DenoiseMaterial, GradientEquirectTexture, WebGLPathTracer } from 'three-gpu-pathtracer';
 import { S } from '../three/wallGeometry';
 import type { Light } from '../model/types';
 import { applyStyle, type RenderStyle } from '../three/styles';
@@ -176,6 +176,32 @@ export function ptLights(mode: RigMode) {
   return g;
 }
 
+/**
+ * Filtro anti-grana: a ogni immagine mostrata il risultato del path tracer passa per uno «smart denoise» che
+ * leviga la grana senza sciogliere i bordi. Forte con pochi campioni, poi sempre più leggero.
+ */
+export function addDenoise(pt: WebGLPathTracer) {
+  const mat = new DenoiseMaterial({ premultipliedAlpha: false, transparent: true, blending: THREE.NoBlending });
+  // come il materiale standard del path tracer applica tone mapping e conversione sRGB; l'alfa esce già
+  // moltiplicato dal filtro (premultipliedAlpha: false per non moltiplicarlo due volte)
+  const u = mat.uniforms as Record<string, THREE.IUniform>;
+  pt.renderToCanvasCallback = (target, renderer, quad) => {
+    const prev = quad.material;
+    const n = pt.samples;
+    u.map.value = target.texture;
+    u.sigma.value = Math.max(1.5, 5 - n / 25);
+    u.threshold.value = Math.max(0.04, 0.12 - n / 600);
+    u.kSigma.value = 1.5;
+    quad.material = mat;
+    const auto = renderer.autoClear;
+    renderer.autoClear = false;
+    quad.render(renderer);
+    renderer.autoClear = auto;
+    quad.material = prev;
+  };
+  return () => mat.dispose();
+}
+
 /** con la luce che rimbalza la stessa lampada illumina molto di più che nel render normale */
 export const PT_LAMP_SCALE = 0.3;
 
@@ -191,6 +217,7 @@ export function pathEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: 
   pt.bounces = 5;
   pt.filterGlossyFactor = 0.5;
   pt.tiles.set(2, 2);
+  const undenoise = addDenoise(pt);
   const prevEnv = scene.environment;
   const prevBg = scene.background;
   const prevEnvI = scene.environmentIntensity;
@@ -205,7 +232,8 @@ export function pathEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: 
       scene.environment = skies[mode].tex;
       scene.environmentIntensity = skies[mode].intensity;
       if (!built) {
-        applyStyle(scene, style);
+        // con i colori del progetto il path tracer usa anche le texture (parquet, piastrelle, intonaco…)
+        applyStyle(scene, style === 'normale' ? 'realistico' : style);
         // la geometria non cambia tra un'immagine e l'altra: il BVH si costruisce una volta sola
         pt.setScene(scene, camera);
         built = true;
@@ -232,6 +260,7 @@ export function pathEngine(gl: THREE.WebGLRenderer, scene: THREE.Scene, camera: 
       removeAll(scene, objs);
     },
     dispose() {
+      undenoise();
       pt.dispose();
       for (const s of Object.values(skies)) s.tex.dispose();
       scene.environment = prevEnv;

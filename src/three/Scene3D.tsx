@@ -13,10 +13,12 @@ import { useCoverage } from '../model/coverage';
 import { magnetToWall } from '../editor2d/snapping';
 import { buildFloorGeometry, buildWallGeometry, S } from './wallGeometry';
 import { partGeometry, partLook } from './partMeshes';
+import { floorSurface } from './textures';
 import { pocketOpenings } from '../model/pocketDoors';
 import { StyleApplier } from './StyleApplier';
 import { STYLE_NAMES, type RenderStyle } from './styles';
-import { AOEffect, LampLights, PathTraceView, SceneLights } from './RenderEffects';
+import { AOEffect, LampLights, PathTraceView, SceneLights, SnapshotHandler } from './RenderEffects';
+import { snap3d } from '../ui/imageExport';
 
 export function Scene3D() {
   const [walk, setWalk] = useState(false);
@@ -89,6 +91,7 @@ export function Scene3D() {
         <World cutaway={cutaway} interactive={!walk} />
         {shadows && !evening && style !== 'blueprint' && <ContactShadows position={[0, 0.014, 0]} opacity={0.35} scale={60} blur={2} far={3} />}
         {walk ? <Walk onExit={() => setWalk(false)} fov={walkFov} speed={walkSpeed} onFov={changeFov} /> : <Orbit />}
+        <SnapshotHandler />
       </Canvas>
       <div className="scene-ctl">
         <button className={cutaway ? 'on' : ''} onClick={() => setCutaway((c) => !c)} data-tip="Abbassa i muri a 1 metro per vedere bene dentro le stanze e i mobili">
@@ -116,6 +119,9 @@ export function Scene3D() {
             🌙 Spegni luci
           </button>
         )}
+        <button onClick={() => snap3d(false)} data-tip="Salva un'immagine PNG della vista 3D così come la vedi (con lo stile scelto). Con Realistico aspetta che compaia «✨ pronto». Dal menu File puoi anche stamparla">
+          📷 Immagine
+        </button>
         <button onClick={() => setWalk(true)} data-tip="Cammina dentro casa ad altezza occhi: clicca nella vista, muovi il mouse per guardare, WASD o frecce per camminare, Esc per uscire">
           🚶 Passeggiata
         </button>
@@ -386,6 +392,7 @@ export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: 
         // gli edifici dentro la stanza (es. casa dentro un recinto) restano fuori dal suo pavimento
         geo: buildFloorGeometry(r.poly, 0.008, der.outlines.filter((o) => inside(o, r.poly))),
         color: der.roomLabel.get(r.key)?.floorColor ?? '#d9c2a0',
+        surface: floorSurface(der.roomLabel.get(r.key)?.name),
       }));
   }, [der, fr]);
   useEffect(() => () => floors.forEach((f) => f.geo.dispose()), [floors]);
@@ -415,7 +422,7 @@ export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: 
         </mesh>
       ))}
       {floors.map((f) => (
-        <mesh key={f.key} geometry={f.geo} receiveShadow onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'room', id: f.key })) : undefined}>
+        <mesh key={f.key} geometry={f.geo} receiveShadow userData={{ surface: f.surface }} onClick={interactive ? (e) => (e.stopPropagation(), useStore.getState().select({ kind: 'room', id: f.key })) : undefined}>
           <meshStandardMaterial color={f.color} side={THREE.DoubleSide} roughness={0.8} />
         </mesh>
       ))}
@@ -427,6 +434,7 @@ export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: 
             geometry={g.geo}
             castShadow
             receiveShadow
+            userData={{ surface: 'plaster' }}
             onClick={!interactive ? undefined : (e) => {
               e.stopPropagation();
               useStore.getState().select({ kind: 'wall', id: g.id });
@@ -759,7 +767,7 @@ function Item3D({ it, selected, interactive = true }: { it: Item; selected: bool
   return (
     <group position={[it.x * S, it.z * S, it.y * S]} rotation-y={-it.rotation} onDoubleClick={interactive && cat.pocket ? (e) => (e.stopPropagation(), animatePocket(it.id)) : undefined} onPointerDown={interactive ? onDown : undefined} onPointerMove={interactive ? onMove : undefined} onPointerUp={interactive ? onUp : undefined}>
       {parts.map((pt, i) => (
-        <mesh key={i} position={[pt.p[0] * S, pt.p[1] * S, pt.p[2] * S]} geometry={partGeometry(pt)} castShadow receiveShadow={pt.t !== 'sph'}>
+        <mesh key={i} position={[pt.p[0] * S, pt.p[1] * S, pt.p[2] * S]} geometry={partGeometry(pt)} castShadow receiveShadow={pt.t !== 'sph'} userData={{ surface: 'furniture' }}>
           <meshStandardMaterial color={pt.c} transparent={pt.o !== undefined} opacity={pt.o ?? 1} {...partLook(pt)} />
         </mesh>
       ))}
