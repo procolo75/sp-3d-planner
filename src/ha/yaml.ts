@@ -47,12 +47,10 @@ export function buildCard(L: Layout, o: CardOpts) {
     if (areas.length) r.push('      # stanze: toccandole si apre la loro mappa, tenendole premute si accende/spegne la luce');
     for (const a of areas) {
       const go: TapAction = { action: 'navigate', path: o.roomPaths.get(a.id)! };
-      if (a.entity) {
-        const rule = classRule(a.entity, a.id, 'area', go).split('\n');
-        // hold_action subito dopo tap_action, prima di state_action
-        rule.splice(rule.indexOf('        state_action:'), 0, ...tapYaml(a.tap ?? { action: 'toggle' }, a.entity, 'hold_action'));
-        r.push(rule.join('\n'));
-      } else r.push([`      - element: ${q(a.id)}`, ...tapYaml(go, undefined)].join('\n'));
+      // regola solo «element» (con «entity» ha-floorplan accendeva la luce anche al tocco): la luce passa
+      // dall'entità scritta nell'azione (toggle → homeassistant.toggle)
+      const hold = a.entity ? tapYaml({ ...(a.tap ?? { action: 'toggle' }), entity: a.tap?.entity ?? a.entity }, undefined, 'hold_action') : [];
+      r.push([`      - element: ${q(a.id)}`, ...tapYaml(go, undefined), ...hold].join('\n'));
     }
   } else {
     const areas = L.areas.filter((a) => a.entity);

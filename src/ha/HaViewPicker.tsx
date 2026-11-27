@@ -21,31 +21,35 @@ export interface PickerProps {
   /** formato fisso dell'immagine (larghezza/altezza): il riquadro prende la stessa forma */
   aspect?: number;
   onChange: (a: { azimuth: number; elevation: number }) => void;
+  /** una sola stanza: il suo poligono (cm) e un punto al suo interno */
+  room?: { poly: { x: number; y: number }[]; at: { x: number; y: number } };
 }
 
 const MIN_EL = 20;
 const MAX_EL = 80;
 const deg = Math.PI / 180;
 
-function useHouseFrame(cutaway: boolean) {
+function useHouseFrame(cutaway: boolean, poly?: { x: number; y: number }[]) {
   const nodes = useStore((s) => s.project.nodes);
   const walls = useStore((s) => s.project.walls);
   return useMemo(() => {
-    const ns = Object.values(nodes);
+    const ns = poly && poly.length >= 3 ? poly : Object.values(nodes);
     if (!ns.length) return { center: new THREE.Vector3(), radius: 5 };
     const xs = ns.map((n) => n.x);
     const ys = ns.map((n) => n.y);
     const H = cutaway ? 110 : Math.max(250, ...Object.values(walls).map((w) => w.height));
     const box = new THREE.Box3(new THREE.Vector3(Math.min(...xs) * S, 0, Math.min(...ys) * S), new THREE.Vector3(Math.max(...xs) * S, H * S, Math.max(...ys) * S));
     return { center: box.getCenter(new THREE.Vector3()), radius: box.getSize(new THREE.Vector3()).length() / 2 };
-  }, [nodes, walls, cutaway]);
+  }, [nodes, walls, cutaway, poly]);
 }
 
-function Rig({ view, azimuth, elevation, cutaway, resetKey, onChange }: PickerProps) {
+function Rig({ view, azimuth, elevation, cutaway, resetKey, onChange, room }: PickerProps) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const invalidate = useThree((s) => s.invalidate);
   const ctl = useRef<OrbitImpl>(null);
-  const { center, radius } = useHouseFrame(cutaway);
+  // solo i movimenti fatti a mano cambiano la vista (non i riposizionamenti fatti dal codice)
+  const dragging = useRef(false);
+  const { center, radius } = useHouseFrame(cutaway, room?.poly);
   const top = view === 'top';
   const target = useMemo(() => (top ? new THREE.Vector3(center.x, 0, center.z) : center.clone()), [center, top]);
   const light = useMemo(() => rig('bright'), []);
@@ -71,7 +75,7 @@ function Rig({ view, azimuth, elevation, cutaway, resetKey, onChange }: PickerPr
   return (
     <>
       <primitive object={light} />
-      <World cutaway={cutaway} interactive={false} exportMode />
+      <World cutaway={cutaway} interactive={false} exportMode focusAt={room?.at ?? null} />
       <OrbitControls
         ref={ctl as never}
         makeDefault
@@ -81,9 +85,11 @@ function Rig({ view, azimuth, elevation, cutaway, resetKey, onChange }: PickerPr
         rotateSpeed={0.6}
         minPolarAngle={top ? 0.0001 : (90 - MAX_EL) * deg}
         maxPolarAngle={top ? 0.0002 : (90 - MIN_EL) * deg}
+        onStart={() => (dragging.current = true)}
+        onEnd={() => (dragging.current = false)}
         onChange={() => {
           const c = ctl.current;
-          if (!c) return;
+          if (!c || !dragging.current) return;
           if (top) onChange({ azimuth: Math.round((c.getAzimuthalAngle() / deg) * 10) / 10, elevation });
           else {
             const a = anglesFrom(camera.position, c.target);
@@ -100,7 +106,7 @@ export function HaViewPicker(props: PickerProps) {
     <div
       className="ha-picker"
       style={props.aspect ? (props.aspect >= 1 ? { aspectRatio: String(props.aspect), height: 'auto', maxHeight: 260 } : { aspectRatio: String(props.aspect), width: 'auto', height: 260, alignSelf: 'center' }) : undefined}
-      data-tip={props.view === 'top' ? 'Trascina per girare la pianta' : 'Trascina per girare la casa e scegliere da dove guardarla'}>
+      data-tip={props.view === 'top' ? 'Trascina per girare la pianta' : props.room ? 'Trascina per girare la stanza e scegliere da dove guardarla' : 'Trascina per girare la casa e scegliere da dove guardarla'}>
       <Canvas key={props.view === 'persp' ? 'p' : 'o'} frameloop="demand" dpr={[1, 2]} gl={{ logarithmicDepthBuffer: true, antialias: true }} camera={{ fov: props.view === 'persp' ? 35 : 15 }}>
         <color attach="background" args={['#eef1f5']} />
         <Rig {...props} />

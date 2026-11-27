@@ -27,6 +27,22 @@ const FORMATS: { id: string; name: string; fit?: number; w?: number; h?: number 
 ];
 const MAX_PX = 4096;
 
+/** vista di una stanza: rotazione/inclinazione e muri bassi (scelti nell'anteprima della stanza) */
+interface RoomView {
+  azimuth: number;
+  elevation: number;
+  cutaway: boolean;
+}
+/** viste delle stanze salvate nel browser, per cartella: non si perdono chiudendo la finestra */
+const roomViewsKey = (slug: string) => `planner:ha-room-views:${slug}`;
+function loadRoomViews(slug: string): Record<string, RoomView> {
+  try {
+    return JSON.parse(localStorage.getItem(roomViewsKey(slug)) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
 function pngDataUrl(b: Uint8Array) {
   let s = '';
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
@@ -106,6 +122,25 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
   const roomList = useMemo(() => mapRooms(der, ents), [der, ents]);
   const rooms = perRoom && roomList.length > 1;
 
+  // vista di ogni stanza: la chiave distingue la vista dall'alto (solo rotazione) da quelle inclinate
+  const [roomViews, setRoomViews] = useState<Record<string, RoomView>>(() => loadRoomViews(slugify(slug)));
+  const [roomSel, setRoomSel] = useState('');
+  const [roomReset, setRoomReset] = useState(0);
+  const rvKey = (roomSlug: string) => `${view === 'top' ? 'top' : 'tilt'}:${roomSlug}`;
+  const roomView = (roomSlug: string): RoomView => roomViews[rvKey(roomSlug)] ?? { azimuth: view === 'top' ? topRot : azimuth, elevation, cutaway: true };
+  const setRoomView = (roomSlug: string, v: Partial<RoomView>) =>
+    setRoomViews((all) => {
+      const next = { ...all, [rvKey(roomSlug)]: { ...roomView(roomSlug), ...v } };
+      try {
+        localStorage.setItem(roomViewsKey(slugify(slug)), JSON.stringify(next));
+      } catch {
+        /* spazio pieno: pazienza */
+      }
+      return next;
+    });
+  const selRoom = roomList.find((a) => a.slug === roomSel) ?? roomList[0];
+  const pickerRoom = useMemo(() => (selRoom ? { poly: selRoom.room.poly, at: der.roomLabelPos.get(selRoom.room.key) ?? selRoom.room.poly[0] } : undefined), [selRoom, der]);
+
   // clic su una stanza nell'anteprima della casa
   useEffect(() => {
     const m = (e: MessageEvent) => typeof e.data?.haRoom === 'string' && setShown(e.data.haRoom);
@@ -136,7 +171,8 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
             const a = roomList[i];
             const tag = `Stanza ${i + 1}/${roomList.length}: ${a.name} · `;
             const lights = ents.lights.filter((l) => pointInPolygon(l, a.room.poly));
-            opts.rooms!.set(a.slug, await api.current.capture(project, view, vo, lights, look, (m) => setBusy(tag + m), a.room));
+            const rv = roomView(a.slug);
+            opts.rooms!.set(a.slug, await api.current.capture(project, view, { ...vo, azimuth: rv.azimuth, elevation: rv.elevation, cutaway: rv.cutaway }, lights, look, (m) => setBusy(tag + m), a.room));
           }
         bundle = buildBundle(project, view, s, r, opts);
       }
@@ -314,6 +350,57 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
                 <p className="muted small" style={{ margin: 0 }}>
                   → pagine <code>{dash}/casa</code>, <code>{dash}/{roomList[0].slug}</code>…
                 </p>
+                {view !== '2d' && selRoom && (
+                  <div className="ha-room-view">
+                    <label className="prop" data-tip="Scegli la stanza e trascinala qui sotto per decidere da dove guardarla nella sua pagina">
+                      <span>Vista stanza</span>
+                      <select value={selRoom.slug} onChange={(e) => setRoomSel(e.target.value)}>
+                        {roomList.map((a) => (
+                          <option key={a.slug} value={a.slug}>
+                            {a.name}
+                            {roomViews[rvKey(a.slug)] ? ' ✓' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <HaViewPicker
+                      view={view}
+                      azimuth={roomView(selRoom.slug).azimuth}
+                      elevation={roomView(selRoom.slug).elevation}
+                      cutaway={roomView(selRoom.slug).cutaway}
+                      resetKey={roomReset}
+                      aspect={fixed && size.width > 0 && size.height > 0 ? size.width / size.height : undefined}
+                      room={pickerRoom}
+                      onChange={(a) => setRoomView(selRoom.slug, view === 'top' ? { azimuth: a.azimuth } : a)}
+                    />
+                    <div className="row ha-angles">
+                      <span className="muted small">
+                        {view === 'top' ? `Rotazione ${Math.round(roomView(selRoom.slug).azimuth)}°` : `Rotazione ${Math.round(roomView(selRoom.slug).azimuth)}° · Inclinazione ${Math.round(roomView(selRoom.slug).elevation)}°`}
+                      </span>
+                      <button
+                        className="small"
+                        onClick={() => {
+                          setRoomViews((all) => {
+                            const next = { ...all };
+                            delete next[rvKey(selRoom.slug)];
+                            localStorage.setItem(roomViewsKey(slugify(slug)), JSON.stringify(next));
+                            return next;
+                          });
+                          setRoomReset((k) => k + 1);
+                        }}
+                        data-tip="Torna alla stessa vista della casa"
+                      >
+                        ↺ Come la casa
+                      </button>
+                    </div>
+                    <label className="check">
+                      <input type="checkbox" checked={roomView(selRoom.slug).cutaway} onChange={(e) => setRoomView(selRoom.slug, { cutaway: e.target.checked })} /> Muri bassi in questa stanza
+                    </label>
+                    <p className="muted small" style={{ margin: 0 }}>
+                      ✓ = vista già scelta. Le altre usano la vista della casa con i muri bassi.
+                    </p>
+                  </div>
+                )}
               </>
             )}
             <label className="prop" data-tip="Nome della cartella in Home Assistant: /config/www/floorplan/<nome>/">

@@ -88,7 +88,10 @@ function lamp(l: Light) {
   return pl;
 }
 
-type SetFocus = (at: { x: number; y: number } | null) => Promise<void>;
+type Pt = { x: number; y: number };
+/** cosa mostra la scena: stanza da sola (o casa intera) e muri bassi */
+type SceneSel = { at: Pt | null; cutaway: boolean };
+type SetFocus = (sel: SceneSel) => Promise<void>;
 
 function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; setFocus: SetFocus }) {
   const gl = useThree((s) => s.gl);
@@ -98,7 +101,7 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
       async capture(p, view, o, lights, look, progress, room) {
         const cam = captureCamera(p, view, o, room?.poly);
         if (!cam) throw new Error('La casa non ha ancora muri');
-        await setFocus(room ? (derive(p).roomLabelPos.get(room.key) ?? room.poly[0]) : null);
+        await setFocus({ at: room ? (derive(p).roomLabelPos.get(room.key) ?? room.poly[0]) : null, cutaway: o.cutaway });
         await frame();
         await frame();
         gl.setPixelRatio(1);
@@ -209,37 +212,38 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
 }
 
 /** avvisa quando la scena ha montato la stanza richiesta */
-function FocusDone({ at, onDone }: { at: { x: number; y: number } | null; onDone: (at: { x: number; y: number } | null) => void }) {
-  useEffect(() => onDone(at), [at, onDone]);
+function FocusDone({ sel, onDone }: { sel: SceneSel; onDone: (sel: SceneSel) => void }) {
+  useEffect(() => onDone(sel), [sel, onDone]);
   return null;
 }
 
 /** canvas WebGL fuori dallo schermo con la casa: i render vengono letti da qui */
 export function HaCaptureCanvas({ cutaway, onReady }: { cutaway: boolean; onReady: (api: CaptureApi) => void }) {
-  // stanza da rendere da sola: la scena si aggiorna con React, il render aspetta che sia montata
-  const [focusAt, setFocusAt] = useState<{ x: number; y: number } | null>(null);
+  // stanza da rendere da sola e muri bassi: la scena si aggiorna con React, il render aspetta che sia montata
+  const [sel, setSel] = useState<SceneSel>({ at: null, cutaway });
   const waiting = useRef<(() => void) | null>(null);
-  const current = useRef(focusAt);
+  const current = useRef(sel);
   // chiamata da dentro il Canvas (ha un suo renderer React): a quel punto la scena è già aggiornata
-  const done = useCallback((at: typeof focusAt) => {
-    current.current = at;
+  const done = useCallback((v: SceneSel) => {
+    current.current = v;
     waiting.current?.();
     waiting.current = null;
   }, []);
-  const setFocus = useCallback<SetFocus>((at) => {
-    const same = (a: typeof at, b: typeof at) => a === b || (!!a && !!b && a.x === b.x && a.y === b.y);
-    if (same(at, current.current)) return Promise.resolve();
+  const setFocus = useCallback<SetFocus>((v) => {
+    const c = current.current;
+    const same = c.cutaway === v.cutaway && (c.at === v.at || (!!c.at && !!v.at && c.at.x === v.at.x && c.at.y === v.at.y));
+    if (same) return Promise.resolve();
     return new Promise<void>((resolve) => {
       waiting.current = resolve;
-      setFocusAt(at);
+      setSel(v);
     });
   }, []);
   return (
     <div style={{ position: 'fixed', left: -10000, top: 0, width: 64, height: 64, pointerEvents: 'none' }} aria-hidden="true">
       <Canvas shadows dpr={1} frameloop="never" gl={{ preserveDrawingBuffer: true, alpha: true, logarithmicDepthBuffer: true, antialias: true }}>
-        <World cutaway={cutaway} interactive={false} exportMode focusAt={focusAt} />
+        <World cutaway={sel.cutaway} interactive={false} exportMode focusAt={sel.at} />
         <Bridge onReady={onReady} setFocus={setFocus} />
-        <FocusDone at={focusAt} onDone={done} />
+        <FocusDone sel={sel} onDone={done} />
       </Canvas>
     </div>
   );

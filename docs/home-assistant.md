@@ -27,6 +27,7 @@ Guida per mettere in Home Assistant la mappa creata con SP 3D Planner (card **ha
    - scegli la vista e **trascina la casa** nel riquadro di anteprima per decidere da dove guardarla (nella vista dall'alto giri la pianta);
    - scegli l'**Aspetto**: **☀ Sempre chiara** (consigliato: casa chiara e senza ombre, le luci accese la illuminano) oppure **🌙 Giorno/notte** (chiara di giorno, buia dopo il tramonto, segue `sun.sun`);
    - **Una pagina per ogni stanza** (attiva di default): sulla mappa della casa toccando una stanza si apre la sua mappa, ingrandita e con solo i suoi muri. Tenendola premuta si accende/spegne la sua luce. In **Dashboard** scrivi l'indirizzo della dashboard che creerai in HA (vedi il passo 4), per esempio `/dashboard-casa`;
+   - **Vista stanza** (viste 3D): scegli una stanza dal menu e trascinala nel riquadro per decidere da dove guardarla, con o senza **muri bassi**. Le stanze già sistemate hanno il segno ✓. Le altre usano la rotazione della casa con i muri bassi. Le scelte restano salvate nel browser per quella cartella;
    - premi **✨ Crea mappa**: con le pagine per stanza ci vuole un po' di più, perché ogni stanza ha i suoi render;
    - prova l'anteprima: i bottoni in alto (🏠 Casa, Cucina…) mostrano le pagine. Sulla casa il clic su una stanza la apre e il tasto destro accende la sua luce. Il clic sui sensori ne cambia lo stato;
    - premi **⬇ Scarica ZIP**.
@@ -126,6 +127,8 @@ Lo YAML è la configurazione **di tutta la dashboard**: una pagina «Casa» più
 2. Aprila e guarda l'indirizzo nella barra del browser, per esempio `http://…:8123/dashboard-casa/0`. La parte `/dashboard-casa` deve coincidere con il campo **Dashboard** del planner. Se è diversa, correggi il campo e premi di nuovo **✨ Crea mappa** (le immagini non cambiano, cambiano solo i link tra le pagine nello YAML).
 3. Premi **✏️ Modifica**, poi **⋮** in alto a destra → **Editor di configurazione raw**.
 4. Cancella tutto e incolla il contenuto di `<nome>.yaml` (oppure il tasto **📋 Copia YAML**). **Salva** e chiudi.
+
+> ⚠️ Questo YAML **non** va in una card Manuale (Aggiungi card → Manuale): lì HA risponde «No card type configured». Va nell'**Editor di configurazione raw** della dashboard.
 
 ### Una sola card (senza pagine per stanza)
 

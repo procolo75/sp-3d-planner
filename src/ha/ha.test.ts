@@ -250,7 +250,9 @@ describe('una pagina per ogni stanza', () => {
     expect(y).toContain('image: /local/floorplan/casa/rooms/cucina/cucina.svg');
     expect(y).toContain('stylesheet: /local/floorplan/casa/casa.css');
     // mappa della casa: tocco = apre la stanza, tieni premuto = la luce
-    expect(y).toMatch(/element: 'area\.cucina'\n\s+tap_action:\n\s+action: navigate\n\s+navigation_path: '\/dashboard-casa\/cucina'\n\s+hold_action:\n\s+action: toggle/);
+    expect(y).toMatch(/- element: 'area\.cucina'\n\s+tap_action:\n\s+action: navigate\n\s+navigation_path: '\/dashboard-casa\/cucina'\n\s+hold_action:\n\s+action: call-service\n\s+service: homeassistant\.toggle\n\s+service_data:\n\s+entity_id: light\.cucina/);
+    // nella mappa della casa l'area non ha «entity» (solo nelle pagine delle stanze)
+    expect(y.split('\n  - title:')[1]).not.toContain("element: 'area.cucina'\n                tap_action:\n                  action: toggle");
   });
 
   it('YAML della dashboard indentato correttamente', () => {
