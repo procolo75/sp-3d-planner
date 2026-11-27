@@ -18,10 +18,12 @@
     "@react-three/fiber": "^9.8.2",
     "fflate": "^0.8.3",
     "idb-keyval": "^6.3.0",
+    "n8ao": "^2.1.0",
     "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.187.0",
+    "three-gpu-pathtracer": "^0.0.24",
     "zundo": "^2.3.0",
     "zustand": "^5.1.0"
   },

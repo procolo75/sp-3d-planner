@@ -1,13 +1,14 @@
 // Scena 3D nascosta usata solo per i render della mappa di Home Assistant: non tocca la vista dell'utente.
 import { Canvas, useThree } from '@react-three/fiber';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
 import { World } from '../three/Scene3D';
-import { S } from '../three/wallGeometry';
 import type { Light, Project } from '../model/types';
 import { derive } from '../model/derived';
 import { pointInPolygon, type Room } from '../model/geom';
 import { captureCamera, type CaptureCamera, type HaView, type ViewOpts } from './views';
+import { pathEngine, rasterEngine, type Engine, type HaQuality } from './renderEngine';
+
+export type { HaQuality } from './renderEngine';
 
 export interface CaptureResult extends CaptureCamera {
   /** render «notte»: luci spente */
@@ -22,7 +23,8 @@ export interface CaptureResult extends CaptureCamera {
 
 export interface CaptureApi {
   /** con `room` rende solo quella stanza (i suoi muri e i suoi mobili), inquadrata da vicino */
-  capture(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, lights: Light[], look: HaLook, progress?: (msg: string) => void, room?: Room): Promise<CaptureResult>;
+  /** `quality`: «fast» render normale ritoccato, «high» path tracing (più lento) */
+  capture(p: Project, view: Exclude<HaView, '2d'>, o: ViewOpts, lights: Light[], look: HaLook, progress?: (msg: string) => void, room?: Room, quality?: HaQuality): Promise<CaptureResult>;
 }
 
 /** «bright»: casa sempre chiara, senza ombre; «daynight»: buia di sera + immagine di giorno che segue sun.sun */
@@ -37,57 +39,6 @@ function dataUrlBytes(url: string) {
 
 const frame = () => new Promise((r) => requestAnimationFrame(() => r(null)));
 
-/** luci di scena: «giorno» come nella vista 3D, «notte» quasi buio */
-export function rig(mode: 'day' | 'night' | 'bright') {
-  const g = new THREE.Group();
-  if (mode === 'bright') {
-    // luce piena e morbida, nessuna ombra: le facce dei muri si distinguono solo per l'orientamento
-    g.add(new THREE.HemisphereLight('#ffffff', '#c8bca8', 1.1));
-    g.add(new THREE.AmbientLight('#ffffff', 0.45));
-    const key = new THREE.DirectionalLight('#ffffff', 0.9);
-    key.position.set(8, 14, 6);
-    g.add(key);
-    const fill = new THREE.DirectionalLight('#ffffff', 0.35);
-    fill.position.set(-6, 8, -10);
-    g.add(fill);
-  } else if (mode === 'day') {
-    g.add(new THREE.HemisphereLight('#ffffff', '#b8a990', 0.7));
-    const sun = new THREE.DirectionalLight('#ffffff', 1.6);
-    sun.position.set(8, 14, 6);
-    sun.castShadow = true;
-    sun.shadow.bias = -0.0005;
-    sun.shadow.normalBias = 0.02;
-    sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20 });
-    g.add(sun);
-    g.add(new THREE.AmbientLight('#ffffff', 0.35));
-    const fill = new THREE.DirectionalLight('#ffffff', 0.5);
-    fill.position.set(-6, 8, -10);
-    g.add(fill);
-  } else {
-    // sera: abbastanza luce da leggere muri e stanze, con un «chiaro di luna» che distingue le facce dei muri
-    g.add(new THREE.HemisphereLight('#9aaad0', '#4a4238', 0.9));
-    g.add(new THREE.AmbientLight('#8090b0', 0.3));
-    const moon = new THREE.DirectionalLight('#b8c8ff', 0.45);
-    moon.position.set(8, 14, 6);
-    g.add(moon);
-  }
-  return g;
-}
-
-/** lampada: luce puntiforme con ombre (così non attraversa i muri) */
-function lamp(l: Light) {
-  const h = Math.max(0.3, l.z * S);
-  const pl = new THREE.PointLight(l.color, (2 + 18 * l.intensity) * Math.max(1, (h * h) / 5.76), 0, 2);
-  pl.position.set(l.x * S, h, l.y * S);
-  pl.castShadow = true;
-  pl.shadow.mapSize.set(1024, 1024);
-  pl.shadow.bias = -0.002;
-  pl.shadow.camera.near = 0.05;
-  pl.shadow.camera.far = 40;
-  return pl;
-}
-
 type Pt = { x: number; y: number };
 /** cosa mostra la scena: stanza da sola (o casa intera) e muri bassi */
 type SceneSel = { at: Pt | null; cutaway: boolean };
@@ -98,45 +49,36 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
   const scene = useThree((s) => s.scene);
   useEffect(() => {
     onReady({
-      async capture(p, view, o, lights, look, progress, room) {
+      async capture(p, view, o, lights, look, progress, room, quality = 'fast') {
         const cam = captureCamera(p, view, o, room?.poly);
         if (!cam) throw new Error('La casa non ha ancora muri');
         await setFocus({ at: room ? (derive(p).roomLabelPos.get(room.key) ?? room.poly[0]) : null, cutaway: o.cutaway });
         await frame();
         await frame();
         gl.setPixelRatio(1);
-        gl.setSize(cam.width, cam.height, false);
-        const shot = (extra: THREE.Object3D[]) => {
-          for (const x of extra) scene.add(x);
-          gl.shadowMap.needsUpdate = true;
-          gl.render(scene, cam.camera);
-          const url = gl.domElement.toDataURL('image/png');
-          for (const x of extra) {
-            scene.remove(x);
-            x.traverse((n) => (n as THREE.PointLight).shadow?.dispose());
-          }
-          return url;
-        };
-        // copia 2D del render, per leggere i pixel
+        // copia 2D del render (W×H), per leggere i pixel
         const c2 = document.createElement('canvas');
         c2.width = cam.width;
         c2.height = cam.height;
         const ctx = c2.getContext('2d', { willReadFrequently: true })!;
-        const pixels = () => {
-          ctx.clearRect(0, 0, cam.width, cam.height);
-          ctx.drawImage(gl.domElement, 0, 0);
-          return ctx.getImageData(0, 0, cam.width, cam.height);
+        const pixels = () => ctx.getImageData(0, 0, cam.width, cam.height);
+        const high = quality === 'high';
+        const engine: Engine = high ? pathEngine(gl, scene, cam.camera, ctx, 128) : rasterEngine(gl, scene, cam.camera, ctx);
+        /** render con il motore scelto; con il path tracing mostra la percentuale */
+        const shot = async (msg: string, mode: 'night' | 'bright' | 'day', opts: { lamp?: Light; ao?: boolean } = {}) => {
+          progress?.(msg);
+          await frame();
+          await engine.shot(mode, { ...opts, progress: high ? (pct) => progress?.(`${msg} ${pct}%`) : undefined });
+          return c2.toDataURL('image/png');
         };
-        progress?.('Render della casa al buio…');
-        const nightUrl = shot([rig('night')]);
+        try {
         // le luci si calcolano sempre rispetto al buio: così danno tutto il loro contributo
+        // (senza ombreggiatura negli angoli, come i render delle lampade, così la differenza è solo la luce)
+        const nightUrl = await shot('Render della casa al buio…', 'night');
         const basePx = pixels().data;
         let baseUrl = nightUrl;
-        if (look === 'bright') {
-          progress?.('Render della casa…');
-          await frame();
-          baseUrl = shot([rig('bright')]);
-        }
+        if (look === 'bright') baseUrl = await shot('Render della casa…', 'bright', { ao: true });
+        else if (!high) baseUrl = await shot('Render della casa al buio…', 'night', { ao: true });
         /** solo la luce aggiunta dalla lampada (acceso − buio), da sommare alla base: si vede sia di notte sia sull'immagine di giorno */
         // ritaglio sulla stanza della lampada: pavimento, soffitto e pareti (il «prisma» della stanza visto dalla camera)
         const rooms = derive(p).rooms;
@@ -192,19 +134,18 @@ function Bridge({ onReady, setFocus }: { onReady: (api: CaptureApi) => void; set
         let day: Uint8Array | undefined;
         let dayUrl: string | undefined;
         if (look === 'daynight') {
-          progress?.('Render della casa di giorno…');
-          await frame();
-          dayUrl = shot([rig('day')]);
+          dayUrl = await shot('Render della casa di giorno…', 'day', { ao: true });
           day = dataUrlBytes(dayUrl);
         }
         const out = new Map<string, Uint8Array>();
         for (let i = 0; i < lights.length; i++) {
-          progress?.(`Render luce ${i + 1}/${lights.length}: ${lights[i].label || lights[i].entityId}…`);
-          await frame();
-          shot([rig('night'), lamp(lights[i])]);
+          await shot(`Render luce ${i + 1}/${lights.length}: ${lights[i].label || lights[i].entityId}…`, 'night', { lamp: lights[i] });
           out.set(lights[i].entityId, dataUrlBytes(lightOnly(roomMask(lights[i]))));
         }
         return { ...cam, base: dataUrlBytes(baseUrl), day, lights: out, previewUrl: dayUrl ?? baseUrl };
+        } finally {
+          engine.dispose();
+        }
       },
     });
   }, [gl, scene, onReady, setFocus]);

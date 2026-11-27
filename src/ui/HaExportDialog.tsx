@@ -8,7 +8,7 @@ import { mapRooms } from '../ha/layout';
 import { dashboardPath } from '../ha/yaml';
 import { pointInPolygon } from '../model/geom';
 import { buildCss } from '../ha/css';
-import { HaCaptureCanvas, type CaptureApi, type HaLook } from '../ha/HaCaptureCanvas';
+import { HaCaptureCanvas, type CaptureApi, type HaLook, type HaQuality } from '../ha/HaCaptureCanvas';
 import { VIEW_NAMES, type HaView } from '../ha/views';
 import { HaViewPicker } from '../ha/HaViewPicker';
 import { notify } from './Notice';
@@ -104,10 +104,12 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
   const [resetKey, setResetKey] = useState(0);
   const [cutaway, setCutaway] = useState(false);
   const [look, setLook] = useState<HaLook>('bright');
+  const [quality, setQuality] = useState<HaQuality>('fast');
   const [slug, setSlug] = useState(() => slugify(project.name || 'casa'));
   /** una pagina per stanza: toccando la stanza sulla mappa della casa si apre la sua */
   const [perRoom, setPerRoom] = useState(true);
-  const [dashboard, setDashboard] = useState('');
+  // indirizzo della dashboard in HA, ricordato per cartella (es. /dashboard-floorplan2)
+  const [dashboard, setDashboard] = useState(() => localStorage.getItem(`planner:ha-dashboard:${slugify(slug)}`) ?? '');
   const dash = dashboardPath(dashboard || `dashboard-${slugify(slug)}`);
   const [busy, setBusy] = useState('');
   /** anteprime: casa (chiave '') e stanze (slug) */
@@ -165,14 +167,14 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
       else {
         if (!api.current) throw new Error('la scena 3D non è ancora pronta, riprova tra un attimo');
         const vo = { res, size: fixed ? size : undefined, azimuth: view === 'top' ? topRot : azimuth, elevation, cutaway };
-        const r = await api.current.capture(project, view, vo, ents.lights, look, setBusy);
+        const r = await api.current.capture(project, view, vo, ents.lights, look, setBusy, undefined, quality);
         if (rooms)
           for (let i = 0; i < roomList.length; i++) {
             const a = roomList[i];
             const tag = `Stanza ${i + 1}/${roomList.length}: ${a.name} · `;
             const lights = ents.lights.filter((l) => pointInPolygon(l, a.room.poly));
             const rv = roomView(a.slug);
-            opts.rooms!.set(a.slug, await api.current.capture(project, view, { ...vo, azimuth: rv.azimuth, elevation: rv.elevation, cutaway: rv.cutaway }, lights, look, (m) => setBusy(tag + m), a.room));
+            opts.rooms!.set(a.slug, await api.current.capture(project, view, { ...vo, azimuth: rv.azimuth, elevation: rv.elevation, cutaway: rv.cutaway }, lights, look, (m) => setBusy(tag + m), a.room, quality));
           }
         bundle = buildBundle(project, view, s, r, opts);
       }
@@ -334,6 +336,13 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
                     <option value="daynight">🌙 Giorno/notte</option>
                   </select>
                 </label>
+                <label className="prop" data-tip="Veloce: render normale con bordi lisci e angoli ombreggiati, pochi secondi. Alta: path tracing, la luce rimbalza davvero (ombre morbide, angoli e lampade realistici), ma ogni immagine richiede da qualche secondo a un minuto">
+                  <span>Qualità</span>
+                  <select value={quality} onChange={(e) => setQuality(e.target.value as HaQuality)}>
+                    <option value="fast">⚡ Veloce</option>
+                    <option value="high">✨ Alta (path tracing, lenta)</option>
+                  </select>
+                </label>
               </>
             )}
             {roomList.length > 1 && (
@@ -345,7 +354,11 @@ export function HaExportDialog({ onClose }: { onClose: () => void }) {
               <>
                 <label className="prop" data-tip="Indirizzo della dashboard in Home Assistant: crea una dashboard nuova (Impostazioni → Dashboard → Aggiungi) e copia qui la parte dell'indirizzo dopo il nome del server, es. /dashboard-casa">
                   <span>Dashboard</span>
-                  <input value={dashboard} placeholder={dash} onChange={(e) => setDashboard(e.target.value)} onBlur={() => dashboard && setDashboard(dashboardPath(dashboard))} />
+                  <input value={dashboard} placeholder={dash} onChange={(e) => setDashboard(e.target.value)} onBlur={() => {
+                      const d = dashboard.trim() ? dashboardPath(dashboard) : '';
+                      setDashboard(d);
+                      localStorage.setItem(`planner:ha-dashboard:${slugify(slug)}`, d);
+                    }} />
                 </label>
                 <p className="muted small" style={{ margin: 0 }}>
                   → pagine <code>{dash}/casa</code>, <code>{dash}/{roomList[0].slug}</code>…

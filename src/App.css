@@ -1095,12 +1095,22 @@ button.link {
 
 /* export HA: anteprima da trascinare per scegliere la vista */
 .ha-picker {
+  /* la colonna delle opzioni è lunga: il riquadro non deve restringersi */
+  flex: none;
   height: 260px;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
+}
+.ha-room-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 .ha-picker:active {
   cursor: grabbing;

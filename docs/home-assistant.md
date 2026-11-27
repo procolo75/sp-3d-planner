@@ -26,6 +26,7 @@ Guida per mettere in Home Assistant la mappa creata con SP 3D Planner (card **ha
 7. Apri il menu **File → Mappa per Home Assistant…**:
    - scegli la vista e **trascina la casa** nel riquadro di anteprima per decidere da dove guardarla (nella vista dall'alto giri la pianta);
    - scegli l'**Aspetto**: **☀ Sempre chiara** (consigliato: casa chiara e senza ombre, le luci accese la illuminano) oppure **🌙 Giorno/notte** (chiara di giorno, buia dopo il tramonto, segue `sun.sun`);
+   - scegli la **Qualità**: **⚡ Veloce** (pochi secondi, bordi lisci e angoli ombreggiati) oppure **✨ Alta** (path tracing: la luce rimbalza davvero, con ombre morbide e lampade realistiche; circa 15-25 secondi per immagine, quindi qualche minuto per casa, stanze e luci);
    - **Una pagina per ogni stanza** (attiva di default): sulla mappa della casa toccando una stanza si apre la sua mappa, ingrandita e con solo i suoi muri. Tenendola premuta si accende/spegne la sua luce. In **Dashboard** scrivi l'indirizzo della dashboard che creerai in HA (vedi il passo 4), per esempio `/dashboard-casa`;
    - **Vista stanza** (viste 3D): scegli una stanza dal menu e trascinala nel riquadro per decidere da dove guardarla, con o senza **muri bassi**. Le stanze già sistemate hanno il segno ✓. Le altre usano la rotazione della casa con i muri bassi. Le scelte restano salvate nel browser per quella cartella;
    - premi **✨ Crea mappa**: con le pagine per stanza ci vuole un po' di più, perché ogni stanza ha i suoi render;
@@ -124,7 +125,7 @@ Puoi provare anche `.../<nome>/base.png`, che deve mostrare la casa al buio.
 Lo YAML è la configurazione **di tutta la dashboard**: una pagina «Casa» più una sottopagina per ogni stanza, con la freccia ← per tornare indietro.
 
 1. **Impostazioni → Dashboard → + Aggiungi dashboard → Nuova dashboard da zero**. Il nome è libero, per esempio «Casa».
-2. Aprila e guarda l'indirizzo nella barra del browser, per esempio `http://…:8123/dashboard-casa/0`. La parte `/dashboard-casa` deve coincidere con il campo **Dashboard** del planner. Se è diversa, correggi il campo e premi di nuovo **✨ Crea mappa** (le immagini non cambiano, cambiano solo i link tra le pagine nello YAML).
+2. Aprila e guarda l'indirizzo nella barra del browser, per esempio `http://…:8123/dashboard-casa/0`. La parte `/dashboard-casa` deve coincidere con il campo **Dashboard** del planner (il planner se lo ricorda per quella cartella). Se non coincide, toccando una stanza HA apre un'altra dashboard invece della pagina della stanza. Se è diversa, correggi il campo e premi di nuovo **✨ Crea mappa** (le immagini non cambiano, cambiano solo i link tra le pagine nello YAML).
 3. Premi **✏️ Modifica**, poi **⋮** in alto a destra → **Editor di configurazione raw**.
 4. Cancella tutto e incolla il contenuto di `<nome>.yaml` (oppure il tasto **📋 Copia YAML**). **Salva** e chiudi.
 

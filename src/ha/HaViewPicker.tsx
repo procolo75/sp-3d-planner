@@ -8,7 +8,7 @@ import type { OrbitControls as OrbitImpl } from 'three-stdlib';
 import { World } from '../three/Scene3D';
 import { S } from '../three/wallGeometry';
 import { useStore } from '../model/store';
-import { rig } from './HaCaptureCanvas';
+import { rig } from './renderEngine';
 import { anglesFrom, type HaView } from './views';
 
 export interface PickerProps {
