@@ -1,6 +1,6 @@
 // Operazioni sul grafo dei muri. Lavorano su una "bozza": copia superficiale delle tabelle,
 // gli oggetti modificati vengono sempre sostituiti (mai mutati), così lo storico undo resta valido.
-import { dist, projectOnSegment, segmentIntersect, sub, norm, cross, type V } from './geom';
+import { dist, dot, mul, projectOnSegment, segmentIntersect, sub, norm, cross, type V } from './geom';
 import { uid, type ID, type Project, type Wall } from './types';
 
 export function draft(p: Project): Project {
@@ -179,13 +179,73 @@ export function deleteWall(p: Project, id: ID) {
   if (p.nodes[w.b]) mergeCollinearAt(p, w.b);
 }
 
-/** Imposta la lunghezza spostando il nodo b lungo la direzione del muro. */
+/**
+ * Nodi da traslare per allungare il muro `w` dal lato di `from` lungo `d` senza storcere nulla:
+ * i muri attaccati non paralleli a `d` (es. quelli a 90°) si spostano interi, quelli paralleli
+ * si allungano/accorciano e fermano la propagazione. null se si arriverebbe all'altro estremo del muro.
+ */
+function stretchNodes(p: Project, w: Wall, from: ID, d: V): Set<ID> | null {
+  const adj = new Map<ID, ID[]>();
+  for (const q of Object.values(p.walls)) {
+    if (q.id === w.id) continue;
+    for (const n of [q.a, q.b]) {
+      if (!adj.has(n)) adj.set(n, []);
+      adj.get(n)!.push(q.id);
+    }
+  }
+  const fixed = from === w.a ? w.b : w.a;
+  const moved = new Set<ID>([from]);
+  const stack = [from];
+  while (stack.length) {
+    const n = stack.pop()!;
+    for (const qid of adj.get(n) ?? []) {
+      const q = p.walls[qid];
+      const other = q.a === n ? q.b : q.a;
+      if (moved.has(other)) continue;
+      const u = norm(sub(p.nodes[other], p.nodes[n]));
+      if (Math.abs(u.x * d.y - u.y * d.x) < 0.02) continue; // parallelo: si allunga
+      if (other === fixed) return null;
+      moved.add(other);
+      stack.push(other);
+    }
+  }
+  return moved;
+}
+
+/**
+ * Imposta la lunghezza spostando il nodo b lungo la direzione del muro. I muri attaccati vengono
+ * traslati con lui (non inclinati): cambiare una misura non storce mai la pianta.
+ */
 export function setWallLength(p: Project, id: ID, L: number) {
   const w = p.walls[id];
   const A = p.nodes[w.a];
   const B = p.nodes[w.b];
   const d = norm(sub(B, A));
-  p.nodes[w.b] = { ...B, x: A.x + d.x * L, y: A.y + d.y * L };
+  const k = L - dist(A, B);
+  if (Math.abs(k) < 0.01) return;
+  // di preferenza si sposta il lato b; se non si può senza storcere, il lato a
+  let moved = stretchNodes(p, w, w.b, d);
+  let delta = mul(d, k);
+  if (!moved) {
+    moved = stretchNodes(p, w, w.a, d);
+    delta = mul(d, -k);
+  }
+  if (!moved) moved = new Set([w.b]);
+  // porte e finestre restano ferme nella pianta: se si sposta il nodo a del loro muro, correggi l'offset
+  for (const q of Object.values(p.walls)) {
+    if (q.id === id || !moved.has(q.a) || moved.has(q.b)) continue;
+    const qd = norm(sub(p.nodes[q.b], p.nodes[q.a]));
+    const shift = dot(delta, qd);
+    for (const o of Object.values(p.openings)) if (o.wallId === q.id) p.openings[o.id] = { ...o, offset: o.offset - shift };
+  }
+  if (moved.has(w.a)) {
+    const shift = dot(delta, d);
+    for (const o of Object.values(p.openings)) if (o.wallId === id) p.openings[o.id] = { ...o, offset: o.offset - shift };
+  }
+  for (const nid of moved) {
+    const n = p.nodes[nid];
+    p.nodes[nid] = { ...n, x: n.x + delta.x, y: n.y + delta.y };
+  }
 }
 
 /** Elimina i gruppi di muri staccati e piccoli (scritte, barre di scala, parti comuni) rispetto al più grande. */

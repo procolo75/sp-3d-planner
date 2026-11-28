@@ -8,7 +8,7 @@ import type { Camera, Item, Light, Opening, Project, Sensor } from '../model/typ
 import { cameraCoverage, useCoverage } from '../model/coverage';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
-import { faceOffset, itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistances } from './snapping';
+import { endOffset, itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistances } from './snapping';
 
 const st0 = () => useStore.getState();
 
@@ -54,7 +54,7 @@ export function Editor2D() {
   const [view, setView] = useState<View>({ cx: 500, cy: 400, zoom: 0.8 });
   const viewRef = useRef(view);
   viewRef.current = view;
-  const [hover, setHover] = useState<(SnapPoint & { guides?: V[][] }) | null>(null);
+  const [hover, setHover] = useState<(SnapPoint & { guides?: V[][]; straight?: V[] }) | null>(null);
   const [rawHover, setRawHover] = useState<V | null>(null);
   const [drawStart, setDrawStart] = useState<SnapPoint | null>(null);
   const [typed, setTyped] = useState('');
@@ -145,7 +145,7 @@ export function Editor2D() {
 
   // --- snapping ----------------------------------------------------------------
   const snap = useCallback(
-    (p: V, opts: { from?: V | null; exclude?: string; free?: boolean }): SnapPoint & { guides?: V[][] } => {
+    (p: V, opts: { from?: V | null; anchors?: V[]; exclude?: string; free?: boolean }): SnapPoint & { guides?: V[][]; straight?: V[] } => {
       const pr = useStore.getState().project;
       const z = viewRef.current.zoom;
       if (opts.free) return { x: p.x, y: p.y };
@@ -167,19 +167,24 @@ export function Editor2D() {
       let q = { ...p };
       const guides: V[][] = [];
       let angleDir: V | null = null;
-      // 2. angoli (0/45/90...) rispetto al punto di partenza
-      if (opts.from) {
-        const d = sub(p, opts.from);
+      // 2. linea dritta (0/45/90...) rispetto al punto di partenza o ai nodi vicini di quello trascinato
+      let from: V | null = null;
+      let bestErr = Infinity;
+      for (const o of opts.from ? [opts.from] : (opts.anchors ?? [])) {
+        const d = sub(p, o);
         const L = Math.hypot(d.x, d.y);
-        if (L > 1) {
-          const ang = Math.atan2(d.y, d.x);
-          const step = Math.PI / 4;
-          const snapped = Math.round(ang / step) * step;
-          const tol = (Math.round(ang / step) % 2 === 0 ? 7 : 4) * (Math.PI / 180);
-          if (Math.abs(snapped - ang) < tol) {
-            angleDir = v(Math.cos(snapped), Math.sin(snapped));
-            q = add(opts.from, mul(angleDir, dot(d, angleDir)));
-          }
+        if (L < 1) continue;
+        const ang = Math.atan2(d.y, d.x);
+        const step = Math.PI / 4;
+        const snapped = Math.round(ang / step) * step;
+        // orizzontale/verticale: tolleranza ampia, diagonali più stretta
+        const tol = (Math.round(ang / step) % 2 === 0 ? 10 : 4) * (Math.PI / 180);
+        const err = Math.abs(snapped - ang);
+        if (err < tol && err < bestErr) {
+          bestErr = err;
+          from = o;
+          angleDir = v(Math.cos(snapped), Math.sin(snapped));
+          q = add(o, mul(angleDir, dot(d, angleDir)));
         }
       }
       // 3. allineamenti con altri nodi
@@ -196,14 +201,16 @@ export function Editor2D() {
           guides.push([v(n.x, n.y), v(q.x, n.y)]);
         }
       }
-      if (angleDir && opts.from) {
+      if (angleDir && from) {
         // mantieni la direzione: interseca il raggio con la linea di allineamento
-        if (ax !== null && Math.abs(angleDir.x) > 0.01) q = lineIntersect(opts.from, angleDir, v(ax, 0), v(0, 1)) ?? q;
-        else if (ay !== null && Math.abs(angleDir.y) > 0.01) q = lineIntersect(opts.from, angleDir, v(0, ay), v(1, 0)) ?? q;
+        if (ax !== null && Math.abs(angleDir.x) > 0.01) q = lineIntersect(from, angleDir, v(ax, 0), v(0, 1)) ?? q;
+        else if (ay !== null && Math.abs(angleDir.y) > 0.01) q = lineIntersect(from, angleDir, v(0, ay), v(1, 0)) ?? q;
       } else {
         if (ax !== null) q.x = ax;
         if (ay !== null) q.y = ay;
       }
+      // guida della linea dritta: lunga, attraverso il punto di partenza
+      const straight = angleDir && from ? [add(from, mul(angleDir, -100000)), add(from, mul(angleDir, 100000))] : undefined;
       // 4. muri
       for (const w of Object.values(pr.walls)) {
         if (w.a === opts.exclude || w.b === opts.exclude) continue;
@@ -212,8 +219,8 @@ export function Editor2D() {
         const pj = projectOnSegment(q, A, B);
         if (pj.dist < Math.max(WALL_SNAP_PX / z, w.thickness / 2) && pj.t > 0.001 && pj.t < 0.999) {
           let pt = pj.point;
-          if (angleDir && opts.from) pt = lineIntersect(opts.from, angleDir, A, sub(B, A)) ?? pt;
-          return { x: pt.x, y: pt.y, wallId: w.id, guides };
+          if (angleDir && from) pt = lineIntersect(from, angleDir, A, sub(B, A)) ?? pt;
+          return { x: pt.x, y: pt.y, wallId: w.id, guides, straight };
         }
       }
       // 5. griglia
@@ -221,7 +228,7 @@ export function Editor2D() {
         const g = z < 1.5 ? 5 : 1;
         q = v(Math.round(q.x / g) * g, Math.round(q.y / g) * g);
       }
-      return { x: q.x, y: q.y, guides };
+      return { x: q.x, y: q.y, guides, straight };
     },
     [],
   );
@@ -434,7 +441,11 @@ export function Editor2D() {
         if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
         setView({ ...d.v0, cx: d.v0.cx - dx / d.v0.zoom, cy: d.v0.cy - dy / d.v0.zoom });
       } else if (d.kind === 'node') {
-        const sp = snap(p, { exclude: d.id, free: e.shiftKey });
+        const pr = st.project;
+        const anchors = Object.values(pr.walls)
+          .filter((w) => w.a === d.id || w.b === d.id)
+          .map((w) => pr.nodes[w.a === d.id ? w.b : w.a]);
+        const sp = snap(p, { exclude: d.id, anchors, free: e.shiftKey });
         setHover(sp);
         st.moveNode(d.id, sp);
       } else if (d.kind === 'wall') {
@@ -631,9 +642,10 @@ export function Editor2D() {
           const h = hoverRef.current;
           if (L && s) {
             const dir = h && dist(h, s) > 0.5 ? norm(sub(h, s)) : v(1, 0);
-            // la misura parte dalla faccia del muro a cui è agganciato, non dal suo asse
-            const off = s.nodeId || s.wallId ? faceOffset(st.project, derRef.current.corners, s, dir) : 0;
-            const end = add(s, mul(dir, L + off));
+            // la misura è lo spazio utile: dalla faccia del muro di partenza alla faccia del muro
+            // che chiuderà l'angolo in fondo (metà spessore), mai dall'asse
+            const T = st.wallThickness;
+            const end = add(s, mul(dir, endOffset(st.project, s, dir, T) + L + T / 2));
             st.addWallSegment(s, end);
             setDrawStart({ x: end.x, y: end.y });
           }
@@ -855,18 +867,21 @@ export function Editor2D() {
         {/* disegno muro */}
         {tool === 'wall' && hover && (
           <>
-            {hover.guides?.map((g, i) => <line key={i} x1={g[0].x} y1={g[0].y} x2={g[1].x} y2={g[1].y} stroke="#e76f51" strokeDasharray="4 4" strokeWidth={1} vectorEffect="non-scaling-stroke" />)}
+            <Guides h={hover} />
             {drawStart && (
               <>
-                <line x1={drawStart.x} y1={drawStart.y} x2={hover.x} y2={hover.y} stroke="#2f7de1" strokeWidth={useStore.getState().wallThickness} strokeOpacity={0.5} />
+                <line x1={drawStart.x} y1={drawStart.y} x2={hover.x} y2={hover.y} stroke={hover.straight ? '#2a9d8f' : '#2f7de1'} strokeWidth={useStore.getState().wallThickness} strokeOpacity={0.5} />
                 <text x={(drawStart.x + hover.x) / 2} y={(drawStart.y + hover.y) / 2 - fs(10)} fontSize={fs(13)} textAnchor="middle" fill="#1b5fb8" fontWeight={700} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: fs(3) }}>
-                  {typed ? `${typed}▏` : fmtLen(clearLength(project, der, drawStart, hover))}
+                  {typed ? `${typed}▏` : fmtLen(clearLength(project, drawStart, hover, useStore.getState().wallThickness))}
                 </text>
               </>
             )}
             <circle cx={hover.x} cy={hover.y} r={fs(5)} fill={hover.nodeId ? '#e76f51' : hover.wallId ? '#f4a261' : '#2f7de1'} />
           </>
         )}
+
+        {/* trascinando un pallino: guide di allineamento e linea dritta */}
+        {tool === 'select' && hover && <Guides h={hover} />}
 
         {placeGhost && <ItemSymbol it={placeGhost} selected={false} z={z} ghost />}
 
@@ -913,7 +928,7 @@ export function Editor2D() {
       </svg>
 
       <div className="hint">
-        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: si misura dalla faccia del muro a cui agganci · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
+        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: è lo spazio utile interno, lo spessore dei muri si aggiunge da solo · linea verde = dritto · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
         {(tool === 'door' || tool === 'window' || tool === 'arch') && 'Clicca su un muro per inserire'}
         {tool === 'garage' && 'Clicca su un muro per mettere il portone del garage (250 cm). Poi a destra scegli larghezza, verso e apertura'}
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
@@ -980,13 +995,23 @@ export function fmtLen(cm: number) {
 }
 
 /** lunghezza netta di un muro in disegno: da faccia a faccia dei muri a cui è agganciato */
-function clearLength(p: Project, der: Derived, s: SnapPoint, e: SnapPoint) {
+function clearLength(p: Project, s: SnapPoint, e: SnapPoint, T: number) {
   const L = dist(s, e);
   if (L < 0.5) return L;
   const dir = norm(sub(e, s));
-  const a = s.nodeId || s.wallId ? faceOffset(p, der.corners, s, dir) : 0;
-  const b = e.nodeId || e.wallId ? faceOffset(p, der.corners, e, mul(dir, -1)) : 0;
+  const a = endOffset(p, s, dir, T);
+  const b = endOffset(p, e, mul(dir, -1), T);
   return Math.max(0, L - a - b);
+}
+
+/** guide: allineamenti con altri nodi (arancio) e linea dritta orizzontale/verticale/45° (verde) */
+function Guides({ h }: { h: { guides?: V[][]; straight?: V[] } }) {
+  return (
+    <>
+      {h.straight && <line x1={h.straight[0].x} y1={h.straight[0].y} x2={h.straight[1].x} y2={h.straight[1].y} stroke="#2a9d8f" strokeDasharray="8 4" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />}
+      {h.guides?.map((g, i) => <line key={i} x1={g[0].x} y1={g[0].y} x2={g[1].x} y2={g[1].y} stroke="#e76f51" strokeDasharray="4 4" strokeWidth={1} vectorEffect="non-scaling-stroke" />)}
+    </>
+  );
 }
 
 function nearestWall(p: Project, at: V, maxD: number): string | null {

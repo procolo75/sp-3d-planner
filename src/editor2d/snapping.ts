@@ -252,6 +252,32 @@ export function faceOffset(p: Project, _corners: Map<string, WallCorners> | null
   return t > 100 ? 0 : t;
 }
 
+/** il punto tocca un muro o un nodo esistente? */
+function onGeometry(p: Project, at: V, excludeWall?: string) {
+  for (const w of Object.values(p.walls)) {
+    if (w.id === excludeWall) continue;
+    const A = p.nodes[w.a];
+    const B = p.nodes[w.b];
+    const ab = sub(B, A);
+    const L2 = ab.x * ab.x + ab.y * ab.y;
+    const t = L2 > 0 ? Math.max(0, Math.min(1, ((at.x - A.x) * ab.x + (at.y - A.y) * ab.y) / L2)) : 0;
+    if (Math.hypot(A.x + ab.x * t - at.x, A.y + ab.y * t - at.y) < 0.5) return true;
+  }
+  return false;
+}
+
+/**
+ * Quanto sottrarre all'estremo di un muro per avere lo spazio utile (da faccia a faccia):
+ * - agganciato a un muro esistente: fino alla sua faccia;
+ * - estremo libero: metà spessore, perché lì arriverà il muro che chiude l'angolo.
+ * Così le misure scritte sono sempre quelle interne, senza contare lo spessore dei muri.
+ */
+export function endOffset(p: Project, at: V, dir: V, thickness: number, excludeWall?: string): number {
+  const f = faceOffset(p, null, at, dir, excludeWall);
+  if (f > 0.01) return f;
+  return onGeometry(p, at, excludeWall) ? 0 : thickness / 2;
+}
+
 /** Lunghezza netta di un muro esistente: dalla faccia dei muri a cui è agganciato ai due estremi */
 export function wallClearLength(p: Project, corners: Map<string, WallCorners>, wallId: string) {
   const w = p.walls[wallId];
