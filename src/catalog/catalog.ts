@@ -29,6 +29,8 @@ export interface CatalogItem {
    * passaggio largo `luce` e alto `h` (misure sulle dimensioni di default, scalano con w/h)
    */
   pocket?: { luce: number; h: number; glass?: boolean };
+  /** elemento della casa (pilastro): alto come i muri, si aggancia agli angoli e ai muri, in 3D sembra un muro */
+  structure?: boolean;
 }
 
 import { BLACK, CERAMIC, DARK, FABRIC, FABRIC2, GLASS, GREY, STEEL, WHITE, WOOD, WOOD_D, armchair, bed, box, cabinet, chair, cornerSofa, cyl, drawers, kitchenBase, lamp, plant, shelf, shiftPart, sofa, sph, table, wallCabinet } from './builders';
@@ -40,6 +42,11 @@ export { shade } from './builders';
 
 const C: CatalogItem[] = [];
 const add = (it: CatalogItem) => C.push(it);
+
+// Struttura della casa
+const PLASTER = '#f4f1ec';
+add({ id: 'pillar', name: 'Pilastro', category: 'Struttura', w: 30, d: 30, h: 280, color: PLASTER, structure: true, parts: [box(0, 0, 0, 30, 280, 30, PLASTER)] });
+add({ id: 'pillarR', name: 'Colonna tonda', category: 'Struttura', w: 30, d: 30, h: 280, color: PLASTER, structure: true, parts: [cyl(0, 0, 0, 15, 280, PLASTER)] });
 
 // Soggiorno
 add({ id: 'sofa2', name: 'Divano 2 posti', category: 'Soggiorno', w: 170, d: 90, h: 83, color: FABRIC, parts: sofa(170, 90, 2, FABRIC) });

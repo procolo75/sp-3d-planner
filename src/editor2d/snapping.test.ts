@@ -32,3 +32,19 @@ describe('lo spessore dei muri non conta', () => {
     expect(d[0].dist + o.width + d[1].dist).toBe(400);
   });
 });
+
+import { magnetPillar } from './snapping';
+import { addNode as addN, addWall as addW, draft as dr } from '../model/ops';
+import { emptyProject as ep } from '../model/types';
+
+describe('pilastri', () => {
+  it("si agganciano all'angolo vicino, poi alla linea del muro, lontano restano liberi", () => {
+    const p = dr(ep());
+    const a = addN(p, { x: 0, y: 0 });
+    const b = addN(p, { x: 400, y: 0 });
+    addW(p, a, b, 20, 280);
+    expect(magnetPillar(p, { x: 10, y: 12, rotation: 0 })).toMatchObject({ x: 0, y: 0 });
+    expect(magnetPillar(p, { x: 200, y: 12, rotation: 0 })).toMatchObject({ x: 200, y: 0 });
+    expect(magnetPillar(p, { x: 200, y: 80, rotation: 0 })).toBeNull();
+  });
+});

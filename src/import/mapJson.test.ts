@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRooms } from '../model/geom';
-import { MapError, parseMapText } from './mapJson';
+import { MapError, mapToProject, parseMapText } from './mapJson';
 
 const room = {
   nome: 'Prova',
@@ -44,5 +44,13 @@ describe('mappa JSON', () => {
     expect(() => parseMapText('ciao')).toThrow(MapError);
     expect(() => parseMapText('{"muri": []}')).toThrow(/non ci sono muri/);
     expect(() => parseMapText('{"muri": [{"da": [0,0]}]}')).toThrow(/muro n. 1/);
+  });
+});
+
+describe('pilastri nella mappa', () => {
+  it('diventano pilastri alti come i muri', () => {
+    const { project } = mapToProject({ altezza_muri: 270, muri: [{ da: [0, 0], a: [400, 0] }], pilastri: [{ pos: [200, 0] }, { pos: [300, 100], larghezza: 40, tondo: true }] });
+    const its = Object.values(project.items).sort((a, b) => a.x - b.x);
+    expect(its.map((i) => [i.catalogId, i.w, i.d, i.h])).toEqual([['pillar', 30, 30, 270], ['pillarR', 40, 40, 270]]);
   });
 });

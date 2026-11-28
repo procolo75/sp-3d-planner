@@ -3,8 +3,8 @@ import { CATALOG_BY_ID, itemParts, type scaledParts } from '../catalog/catalog';
 import { animateDoor, animatePocket, DOOR_OPEN_DEFAULT, openingOpen } from '../model/pocketAnim';
 import { derive, focusedRoom, useDerived, type Derived } from '../model/derived';
 import { add, dist, dot, mul, norm, perp, pointInPolygon, projectOnSegment, roomSides, sub, v, lineIntersect, type Room, type RoomSide, type V } from '../model/geom';
-import { offsetOnWall, redo, undo, useStore, type SnapPoint } from '../model/store';
-import type { Camera, Item, Light, Opening, Project, Sensor } from '../model/types';
+import { offsetOnWall, redo, undo, useStore, type SnapPoint, type Tool } from '../model/store';
+import type { Camera, Item, Light, Opening, OpeningType, Project, Sensor } from '../model/types';
 import { cameraCoverage, useCoverage } from '../model/coverage';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
@@ -13,7 +13,13 @@ import { itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistance
 const st0 = () => useStore.getState();
 
 /** larghezza iniziale per tipo di apertura (SKYTTA: 152 cm) */
-const OPENING_WIDTH: Record<string, number> = { door: 80, window: 120, arch: 90, sliding: 152, garage: 250 };
+const OPENING_WIDTH: Record<string, number> = { door: 80, window: 120, frenchWindow: 120, arch: 90, sliding: 152, garage: 250 };
+const OPENING_TOOLS = new Set<Tool>(['door', 'window', 'frenchWindow', 'arch', 'sliding', 'garage']);
+/** la portafinestra è una finestra con il davanzale a terra */
+const openingOf = (t: Tool) => (t === 'frenchWindow' ? 'window' : (t as OpeningType));
+const FRENCH_WINDOW = { sill: 0, height: 220 };
+/** il pilastro si mette con il suo strumento, gli altri mobili dal catalogo */
+const placingId = (tool: Tool, placeCatalogId: string | null) => (tool === 'pillar' ? 'pillar' : tool === 'place' ? placeCatalogId : null);
 
 interface View {
   cx: number;
@@ -324,14 +330,14 @@ export function Editor2D() {
       return;
     }
 
-    if (st.tool === 'door' || st.tool === 'window' || st.tool === 'arch' || st.tool === 'sliding' || st.tool === 'garage') {
+    if (OPENING_TOOLS.has(st.tool)) {
       const h = nearestWall(st.project, p, 30 / viewRef.current.zoom);
       if (h) {
         const w = st.project.walls[h];
         const L = dist(st.project.nodes[w.a], st.project.nodes[w.b]);
         const def = OPENING_WIDTH[st.tool];
         const off = clamp(Math.round(offsetOnWall(st.project, h, p)), def / 2, L - def / 2);
-        const id = st.addOpening(h, st.tool, off);
+        const id = st.addOpening(h, openingOf(st.tool), off, st.tool === 'frenchWindow' ? FRENCH_WINDOW : undefined);
         st.select({ kind: 'opening', id });
       }
       return;
@@ -362,14 +368,16 @@ export function Editor2D() {
       return;
     }
 
-    if (st.tool === 'place' && placeCatalogId) {
-      const cat = CATALOG_BY_ID[placeCatalogId];
+    const placeId = placingId(st.tool, placeCatalogId);
+    if (placeId) {
+      const cat = CATALOG_BY_ID[placeId];
       const tmp: Item = { id: '_', catalogId: cat.id, x: p.x, y: p.y, z: cat.z ?? 0, rotation: 0, w: st0().placeOverrides?.w ?? cat.w, d: st0().placeOverrides?.d ?? cat.d, h: st0().placeOverrides?.h ?? cat.h };
       const m = e.shiftKey ? null : magnetToWall(st.project, tmp, der);
       if (m?.d) useStore.setState({ placeOverrides: { ...st0().placeOverrides, d: m.d } });
-      const id = st.addItem(placeCatalogId, m ?? p, m?.rotation ?? 0);
+      const id = st.addItem(placeId, m ?? { x: Math.round(p.x), y: Math.round(p.y) }, m?.rotation ?? 0);
       if (id) st.select({ kind: 'item', id });
-      st.setTool('select');
+      // i pilastri di solito sono tanti: lo strumento resta attivo (Esc per finire)
+      if (st.tool !== 'pillar') st.setTool('select');
       return;
     }
 
@@ -687,6 +695,7 @@ export function Editor2D() {
         if (k === 'w') st.setTool('wall');
         if (k === 'p') st.setTool('door');
         if (k === 'f') st.setTool('window');
+        if (k === 'b') st.setTool('frenchWindow');
         if (k === 't') st.setTool('camera');
         if (k === 'l') st.setTool('light');
       }
@@ -717,19 +726,20 @@ export function Editor2D() {
   const selWall = selection?.kind === 'wall' ? selection.id : null;
 
   const openingHover = useMemo(() => {
-    if (!(tool === 'door' || tool === 'window' || tool === 'arch' || tool === 'sliding' || tool === 'garage') || !rawHover) return null;
+    if (!OPENING_TOOLS.has(tool) || !rawHover) return null;
     const wid = nearestWall(project, rawHover, 30 / z);
     if (!wid) return null;
     const w = project.walls[wid];
     const L = dist(project.nodes[w.a], project.nodes[w.b]);
     const width = Math.min(OPENING_WIDTH[tool], dist(project.nodes[w.a], project.nodes[w.b]));
-    const o: Opening = { id: '_', wallId: wid, type: tool, offset: clamp(offsetOnWall(project, wid, rawHover), width / 2, L - width / 2), width, height: 0, sill: 0 };
+    const o: Opening = { id: '_', wallId: wid, type: openingOf(tool), offset: clamp(offsetOnWall(project, wid, rawHover), width / 2, L - width / 2), width, height: 0, sill: 0 };
     return o;
   }, [tool, rawHover, project, z]);
 
   const placeGhost = useMemo(() => {
-    if (tool !== 'place' || !placeCatalogId || !rawHover) return null;
-    const cat = CATALOG_BY_ID[placeCatalogId];
+    const placeId = placingId(tool, placeCatalogId);
+    if (!placeId || !rawHover) return null;
+    const cat = CATALOG_BY_ID[placeId];
     const tmp: Item = { id: '_', catalogId: cat.id, x: rawHover.x, y: rawHover.y, z: cat.z ?? 0, rotation: 0, w: st0().placeOverrides?.w ?? cat.w, d: st0().placeOverrides?.d ?? cat.d, h: st0().placeOverrides?.h ?? cat.h };
     const m = magnetToWall(project, tmp, der);
     return m ? { ...tmp, ...m } : tmp;
@@ -764,7 +774,7 @@ export function Editor2D() {
 
         {/* mobili */}
         {Object.values(project.items)
-          .filter((it) => !CATALOG_BY_ID[it.catalogId]?.pocket)
+          .filter((it) => !CATALOG_BY_ID[it.catalogId]?.pocket && !CATALOG_BY_ID[it.catalogId]?.structure)
           .sort((a, b) => a.z + a.h - (b.z + b.h))
           .map((it) => (
             <ItemSymbol key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} z={z} />
@@ -799,9 +809,9 @@ export function Editor2D() {
         ))}
         {openingHover && <OpeningSymbol p={project} o={openingHover} ghost />}
 
-        {/* porte a scomparsa: stanno dentro al muro, quindi sopra al muro */}
+        {/* porte a scomparsa e pilastri: stanno dentro al muro, quindi sopra al muro */}
         {Object.values(project.items)
-          .filter((it) => CATALOG_BY_ID[it.catalogId]?.pocket)
+          .filter((it) => CATALOG_BY_ID[it.catalogId]?.pocket || CATALOG_BY_ID[it.catalogId]?.structure)
           .map((it) => (
             <ItemSymbol key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} z={z} />
           ))}
@@ -1190,6 +1200,16 @@ function ItemSymbol({ it, selected, z, ghost }: { it: Item; selected: boolean; z
   const sorted = [...parts].sort((a, b) => topOf(a) - topOf(b));
   const deg = (it.rotation * 180) / Math.PI;
   const hz = 22 / z;
+  if (cat.structure) {
+    // pilastro: pieno e scuro come i muri
+    const round = parts[0]?.t === 'cyl';
+    const look = { fill: selected ? '#2f7de1' : '#4a4e55', stroke: selected ? '#1d5fb8' : '#2b2d31', strokeWidth: 1.5, vectorEffect: 'non-scaling-stroke' as const };
+    return (
+      <g transform={`translate(${it.x} ${it.y}) rotate(${deg})`} opacity={ghost ? 0.5 : 1} style={{ pointerEvents: 'none' }}>
+        {round ? <ellipse cx={0} cy={0} rx={it.w / 2} ry={it.d / 2} {...look} /> : <rect x={-it.w / 2} y={-it.d / 2} width={it.w} height={it.d} {...look} />}
+      </g>
+    );
+  }
   return (
     <g transform={`translate(${it.x} ${it.y}) rotate(${deg})`} opacity={ghost ? 0.6 : 1} style={{ pointerEvents: 'none' }}>
       <rect x={-it.w / 2} y={-it.d / 2} width={it.w} height={it.d} fill="#fff" fillOpacity={0.9} stroke="none" />

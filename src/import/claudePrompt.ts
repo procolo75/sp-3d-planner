@@ -16,6 +16,9 @@ PORTE E FINESTRE
 - Porte verso balcone/terrazzo: tipo "portafinestra". Passaggi senza porta: tipo "varco". Ante scorrevoli (es. cabina armadio): tipo "scorrevole". Portone del garage (basculante o sezionale): tipo "garage".
 - Non inventare aperture che non vedi.
 
+PILASTRI
+- Pilastri e colonne (quadrati pieni o cerchi pieni isolati o dentro i muri): "pos" = centro, "larghezza" e "profondita" in cm; "tondo": true per le colonne rotonde.
+
 STANZE
 - Per ogni stanza un nome (come scritto sulla pianta, es. "Cucina", "Camera 1") e un punto "pos" al suo interno.
 
@@ -30,5 +33,6 @@ FORMATO DELLA RISPOSTA: solo il JSON, in un unico blocco, così:
   "muri": [ { "da": [0, 0], "a": [1201, 0], "spessore": 30 } ],
   "porte": [ { "pos": [400, 600], "larghezza": 80, "tipo": "porta" } ],
   "finestre": [ { "pos": [200, 0], "larghezza": 120, "davanzale": 95, "altezza": 140 } ],
-  "stanze": [ { "nome": "Cucina", "pos": [900, 300] } ]
+  "stanze": [ { "nome": "Cucina", "pos": [900, 300] } ],
+  "pilastri": [ { "pos": [600, 0], "larghezza": 30, "profondita": 30 } ]
 }`;

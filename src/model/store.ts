@@ -27,7 +27,8 @@ export function setLocked(v: boolean) {
   }
 }
 
-export type Tool = 'select' | 'wall' | 'door' | 'window' | 'arch' | 'sliding' | 'garage' | 'calibrate' | 'place' | 'detect' | 'camera' | 'light' | 'sensor';
+/** frenchWindow = portafinestra (finestra fino a terra, es. sul balcone); pillar = pilastro */
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'frenchWindow' | 'pillar' | 'arch' | 'sliding' | 'garage' | 'calibrate' | 'place' | 'detect' | 'camera' | 'light' | 'sensor';
 export type Selection = { kind: 'wall' | 'opening' | 'item' | 'room' | 'node' | 'camera' | 'light' | 'sensor'; id: string } | null;
 
 /** Punto risolto dallo snapping: nodo esistente, punto su un muro, o libero */
@@ -77,7 +78,7 @@ interface State {
   moveWall(id: ID, delta: V, base: Project): void;
   finishGeometryEdit(): void;
 
-  addOpening(wallId: ID, type: OpeningType, offset: number): ID;
+  addOpening(wallId: ID, type: OpeningType, offset: number, preset?: Partial<Pick<Opening, 'width' | 'height' | 'sill'>>): ID;
   updateOpening(id: ID, patch: Partial<Opening>): void;
   deleteOpening(id: ID): void;
 
@@ -238,10 +239,10 @@ export const useStore = create<State>()(
             ops.normalize(p);
           }),
 
-        addOpening: (wallId, type, offset) => {
+        addOpening: (wallId, type, offset, preset) => {
           const id = uid();
           mutate((p) => {
-            p.openings[id] = { id, wallId, type, offset, ...OPENING_DEFAULTS[type] };
+            p.openings[id] = { id, wallId, type, offset, ...OPENING_DEFAULTS[type], ...preset };
           });
           return id;
         },
@@ -257,7 +258,7 @@ export const useStore = create<State>()(
           const id = uid();
           mutate((p) => {
             const o = get().placeOverrides;
-            p.items[id] = { id, catalogId, x: at.x, y: at.y, z: cat.z ?? 0, rotation, w: o?.w ?? cat.w, d: o?.d ?? cat.d, h: o?.h ?? cat.h, ...(o?.label ? { label: o.label } : {}) };
+            p.items[id] = { id, catalogId, x: at.x, y: at.y, z: cat.z ?? 0, rotation, w: o?.w ?? cat.w, d: o?.d ?? cat.d, h: o?.h ?? (cat.structure ? Math.max(0, ...Object.values(p.walls).map((w) => w.height)) || get().wallHeight : cat.h), ...(o?.label ? { label: o.label } : {}) };
           });
           set({ placeOverrides: null });
           return id;

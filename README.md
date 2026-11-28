@@ -139,9 +139,11 @@ Le stanze si formano da sole quando i muri chiudono uno spazio.
 |---|---|
 | **🚪 Porta** (tasto **P**) | porta a battente (80 cm) |
 | **🪟 Finestra** (tasto **F**) | finestra (120 cm, davanzale 95 cm) |
+| **▯ Portafinestra** (tasto **B**) | finestra fino a terra verso balcone o terrazzo (120×220 cm, davanzale 0) |
 | **⌒ Varco** | passaggio senza porta |
 | **⇆ Scorrevole** | ante scorrevoli tipo IKEA **SKYTTA** |
 | **🚘 Garage** | portone del garage basculante/sezionale (250×215 cm) |
+| **▪ Pilastro** | pilastro 30×30 alto come i muri: si aggancia agli angoli e alle linee dei muri; resta attivo per metterne altri (Esc per finire). A destra misure e forma (quadrato o tondo) |
 
 **Inserire**: scegli lo strumento e clicca sul muro. Mentre muovi il mouse vedi le **distanze dai muri vicini** (misurate fino al filo del muro, su entrambi i lati).
 
@@ -298,7 +300,7 @@ Sulla mappa: toccando una stanza o il pallino giallo accendi e spegni la luce, i
 |---|---|
 | **⌘S** / **⇧⌘S** / **⌘O** | Salva su PC / Salva con nome / Apri da PC |
 | **⌘Z** / **⇧⌘Z** (o **⌘Y**) | Annulla / Ripeti |
-| **V** / **W** / **P** / **F** / **T** / **L** | Seleziona / Muro / Porta / Finestra / Telecamera / Luce |
+| **V** / **W** / **P** / **F** / **B** / **T** / **L** | Seleziona / Muro / Porta / Finestra / Portafinestra / Telecamera / Luce |
 | **Esc** | termina il muro, torna a *Seleziona*, deseleziona |
 | **Canc** o **⌫** | elimina la selezione (abbatte il muro) |
 | **R** / **Shift+R** | ruota il mobile di 90° / 15°; la telecamera di 15° in un verso o nell'altro |

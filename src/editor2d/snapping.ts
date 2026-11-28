@@ -28,6 +28,7 @@ const MAGNET = 35; // cm
  */
 export function magnetToWall(p: Project, it: Item, _der?: Derived): { x: number; y: number; rotation: number; d?: number } | null {
   if (CATALOG_BY_ID[it.catalogId]?.pocket) return magnetIntoWall(p, it);
+  if (CATALOG_BY_ID[it.catalogId]?.structure) return magnetPillar(p, it);
   const c = { x: it.x, y: it.y };
   const uw = { x: Math.cos(it.rotation), y: Math.sin(it.rotation) };
   const ud = { x: -Math.sin(it.rotation), y: Math.cos(it.rotation) };
@@ -95,6 +96,43 @@ export function magnetToWall(p: Project, it: Item, _der?: Derived): { x: number;
  * Porte a scomparsa: il controtelaio va DENTRO al muro, centrato sull'asse, parallelo e spesso
  * quanto il muro (ritorna anche la profondità `d`). Resta tutto dentro al muro se ci sta.
  */
+/**
+ * Pilastro: il centro va sull'angolo dei muri più vicino (entro 30 cm), altrimenti sulla linea
+ * del muro (entro 20 cm, girato come il muro). Ritorna null lontano dai muri: resta dov'è.
+ */
+export function magnetPillar(p: Project, it: Pick<Item, 'x' | 'y' | 'rotation'>): { x: number; y: number; rotation: number } | null {
+  const c = { x: it.x, y: it.y };
+  let node: V | null = null;
+  let nd = 30;
+  for (const n of Object.values(p.nodes)) {
+    const d = dist(n, c);
+    if (d < nd) {
+      nd = d;
+      node = n;
+    }
+  }
+  // gira il pilastro come il primo muro che parte dall'angolo
+  const wallRot = (w: { a: string; b: string }) => {
+    const A = p.nodes[w.a];
+    const B = p.nodes[w.b];
+    return Math.atan2(B.y - A.y, B.x - A.x);
+  };
+  if (node) {
+    const w = Object.values(p.walls).find((q) => p.nodes[q.a] === node || p.nodes[q.b] === node);
+    return { x: node.x, y: node.y, rotation: w ? wallRot(w) : it.rotation };
+  }
+  let best: { x: number; y: number; rotation: number } | null = null;
+  let bd = 20;
+  for (const w of Object.values(p.walls)) {
+    const pj = projectOnSegment(c, p.nodes[w.a], p.nodes[w.b]);
+    if (pj.dist < bd) {
+      bd = pj.dist;
+      best = { x: pj.point.x, y: pj.point.y, rotation: wallRot(w) };
+    }
+  }
+  return best;
+}
+
 function magnetIntoWall(p: Project, it: Item): { x: number; y: number; rotation: number; d: number } | null {
   let best: { x: number; y: number; rotation: number; d: number; dist: number } | null = null;
   for (const w of Object.values(p.walls)) {

@@ -452,7 +452,8 @@ export function World({ cutaway, interactive, exportMode, focusAt }: { cutaway: 
       {Object.values(project.items)
         .filter((it) => !fr || pointInPolygon(it, fr.poly))
         .map((it) => (
-        <Item3D key={it.id} it={it} selected={selection?.kind === 'item' && selection.id === it.id} interactive={interactive} />
+        // con i muri abbassati anche i pilastri si abbassano
+        <Item3D key={it.id} it={cutaway && CATALOG_BY_ID[it.catalogId]?.structure ? { ...it, h: Math.min(it.h, 110) } : it} selected={selection?.kind === 'item' && selection.id === it.id} interactive={interactive} />
       ))}
       {covGeos.map((g, i) => (
         <mesh key={'cov' + g.id} geometry={g.geo} renderOrder={2 + i}>
@@ -767,7 +768,7 @@ function Item3D({ it, selected, interactive = true }: { it: Item; selected: bool
   return (
     <group position={[it.x * S, it.z * S, it.y * S]} rotation-y={-it.rotation} onDoubleClick={interactive && cat.pocket ? (e) => (e.stopPropagation(), animatePocket(it.id)) : undefined} onPointerDown={interactive ? onDown : undefined} onPointerMove={interactive ? onMove : undefined} onPointerUp={interactive ? onUp : undefined}>
       {parts.map((pt, i) => (
-        <mesh key={i} position={[pt.p[0] * S, pt.p[1] * S, pt.p[2] * S]} geometry={partGeometry(pt)} castShadow receiveShadow={pt.t !== 'sph'} userData={{ surface: 'furniture' }}>
+        <mesh key={i} position={[pt.p[0] * S, pt.p[1] * S, pt.p[2] * S]} geometry={partGeometry(pt)} castShadow receiveShadow={pt.t !== 'sph'} userData={{ surface: cat.structure ? 'plaster' : 'furniture' }}>
           <meshStandardMaterial color={pt.c} transparent={pt.o !== undefined} opacity={pt.o ?? 1} {...partLook(pt)} />
         </mesh>
       ))}

@@ -303,8 +303,9 @@ export function Properties() {
         <label className="prop">
           <span>Tipo</span>
           <select
-            value={o.type}
+            value={o.type === 'window' && o.sill === 0 ? 'frenchWindow' : o.type}
             onChange={(e) => {
+              if (e.target.value === 'frenchWindow') return st.updateOpening(o.id, { type: 'window', sill: 0, height: Math.max(o.height, 220) });
               const t = e.target.value as typeof o.type;
               st.updateOpening(o.id, { type: t, ...(t === 'window' ? { sill: o.sill || 95, height: 140 } : t === 'sliding' ? { sill: 0, height: 205 } : t === 'garage' ? { sill: 0, height: 215, width: Math.max(o.width, 240) } : { sill: 0, height: Math.max(o.height, 210) }) });
             }}
@@ -313,6 +314,7 @@ export function Properties() {
             <option value="sliding">Ante scorrevoli (SKYTTA)</option>
             <option value="garage">Portone del garage</option>
             <option value="window">Finestra</option>
+            <option value="frenchWindow">Portafinestra (balcone)</option>
             <option value="arch">Varco</option>
           </select>
         </label>
@@ -437,6 +439,15 @@ export function Properties() {
         <h3>{it.label || cat?.name || 'Mobile'}</h3>
         {it.label && cat && <p className="muted small" style={{ margin: 0 }}>{cat.name}</p>}
         <RoomName value={it.label ?? ''} placeholder="nome (facoltativo)" onChange={(label) => st.updateItem(it.id, { label: label || undefined })} />
+        {cat?.structure && (
+          <label className="prop" data-tip="Pilastro a sezione quadrata/rettangolare o colonna tonda">
+            <span>Forma</span>
+            <select value={it.catalogId} onChange={(e) => st.updateItem(it.id, { catalogId: e.target.value, ...(e.target.value === 'pillarR' ? { d: it.w } : {}) })}>
+              <option value="pillar">Quadrato</option>
+              <option value="pillarR">Tondo</option>
+            </select>
+          </label>
+        )}
         {cat?.pocket ? (
           <PocketDoorProps it={it} />
         ) : (

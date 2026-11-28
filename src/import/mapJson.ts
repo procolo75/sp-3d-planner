@@ -14,6 +14,8 @@ export interface MapData {
   porte?: { pos: Pt; larghezza?: number; tipo?: 'porta' | 'portafinestra' | 'varco' | 'scorrevole' | 'garage' }[];
   finestre?: { pos: Pt; larghezza?: number; davanzale?: number; altezza?: number }[];
   stanze?: { nome: string; pos: Pt }[];
+  /** pilastri: centro, misure in pianta (default 30×30), tondo = colonna */
+  pilastri?: { pos: Pt; larghezza?: number; profondita?: number; tondo?: boolean }[];
 }
 
 export class MapError extends Error {}
@@ -46,6 +48,7 @@ export function validateMap(raw: unknown): MapData {
     ['porte', m.porte],
     ['finestre', m.finestre],
     ['stanze', m.stanze],
+    ['pilastri', m.pilastri],
   ] as const) {
     if (list !== undefined && !Array.isArray(list)) throw new MapError(`"${key}" deve essere un elenco.`);
     (list ?? []).forEach((o, i) => {
@@ -108,6 +111,12 @@ export function mapToProject(m: MapData): { project: Project; stats: MapStats } 
     else place(d.pos, 'door', d.larghezza ?? 80, 210, 0);
   }
   for (const f of m.finestre ?? []) place(f.pos, 'window', f.larghezza ?? 120, f.altezza ?? 140, f.davanzale ?? 95);
+
+  for (const c of m.pilastri ?? []) {
+    const id = uid();
+    const w = Math.max(5, c.larghezza ?? 30);
+    p.items[id] = { id, catalogId: c.tondo ? 'pillarR' : 'pillar', x: c.pos[0], y: c.pos[1], z: 0, rotation: 0, w, d: c.tondo ? w : Math.max(5, c.profondita ?? w), h: H };
+  }
 
   for (const s of m.stanze ?? []) {
     const id = uid();
