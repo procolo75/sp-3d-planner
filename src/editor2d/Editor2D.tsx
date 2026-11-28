@@ -8,7 +8,6 @@ import type { Camera, Item, Light, Opening, Project, Sensor } from '../model/typ
 import { cameraCoverage, useCoverage } from '../model/coverage';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
-import { clearLength, effStart, planSegment, snapFrom, startChain, typedEnd, type ChainStart, type DrawPt } from './drawChain';
 import { itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistances } from './snapping';
 
 const st0 = () => useStore.getState();
@@ -57,19 +56,15 @@ export function Editor2D() {
   viewRef.current = view;
   const [hover, setHover] = useState<(SnapPoint & { guides?: V[][]; straight?: V[] }) | null>(null);
   const [rawHover, setRawHover] = useState<V | null>(null);
-  const [drawStart, setDrawStart] = useState<DrawPt | null>(null);
-  const chainRef = useRef<ChainStart>(null);
+  const [drawStart, setDrawStart] = useState<SnapPoint | null>(null);
+  // cambiando strumento spariscono le guide rimaste a schermo
   useEffect(() => {
-    if (!drawStart) chainRef.current = null;
-  }, [drawStart]);
-
-  /** aggiunge un tratto della catena tenendo le misure come spazio utile (vedi drawChain.ts) */
-  const commitSegment = (s: DrawPt, e: SnapPoint, typedSeg: boolean) => {
-    const st = useStore.getState();
-    const plan = planSegment(st.project, s, e, st.wallThickness, chainRef.current, typedSeg);
-    chainRef.current = plan.chain;
-    st.addWallSegment(plan.from, plan.to, plan.moves);
-    setDrawStart(plan.next);
+    setHover(null);
+  }, [tool]);
+  /** aggiunge un tratto: il muro è la linea disegnata, lo spessore non conta */
+  const commitSegment = (s: SnapPoint, e: SnapPoint) => {
+    useStore.getState().addWallSegment(s, e);
+    setDrawStart({ x: e.x, y: e.y });
   };
   const [typed, setTyped] = useState('');
   const [calib, setCalib] = useState<V[]>([]);
@@ -319,12 +314,11 @@ export function Editor2D() {
     }
 
     if (st.tool === 'wall') {
-      const sp = snap(p, { from: snapFrom(drawStart, p, st.wallThickness), free: e.shiftKey });
+      const sp = snap(p, { from: drawStart, free: e.shiftKey });
       if (!drawStart) {
         setDrawStart(sp);
-        chainRef.current = startChain(st.project, sp);
       } else if (dist(sp, drawStart) > 1) {
-        commitSegment(drawStart, sp, false);
+        commitSegment(drawStart, sp);
         setTyped('');
       }
       return;
@@ -516,7 +510,7 @@ export function Editor2D() {
       }
       return;
     }
-    if (st.tool === 'wall') setHover(snap(p, { from: snapFrom(drawStart, p, st.wallThickness), free: e.shiftKey }));
+    if (st.tool === 'wall') setHover(snap(p, { from: drawStart, free: e.shiftKey }));
     else setHover(null);
   };
 
@@ -655,11 +649,11 @@ export function Editor2D() {
           const s = drawStartRef.current;
           const h = hoverRef.current;
           if (L && s) {
-            const from = snapFrom(s, h ?? s, st.wallThickness) ?? s;
-            const dir = h && dist(h, from) > 0.5 ? norm(sub(h, from)) : v(1, 0);
+            const dir = h && dist(h, s) > 0.5 ? norm(sub(h, s)) : v(1, 0);
             // la misura è lo spazio utile: dalla faccia del muro di partenza (mai dall'asse);
             // se l'estremo resta libero è la punta del muro, se poi si gira l'angolo si allunga da solo
-            commitSegment(s, typedEnd(st.project, s, dir, L, st.wallThickness), true);
+            // la misura è la linea: lo spessore dei muri non esiste
+            commitSegment(s, add(s, mul(dir, L)));
           }
           setTyped('');
           return;
@@ -792,11 +786,11 @@ export function Editor2D() {
 
         {/* muri */}
         {Object.values(project.walls).map((w) => {
-          const c = der.corners.get(w.id);
-          if (!c) return null;
-          const pts = [project.nodes[w.a], c.aL, c.bL, project.nodes[w.b], c.bR, c.aR];
+          // il muro è una linea: lo spessore non esiste
+          const A = project.nodes[w.a];
+          const B = project.nodes[w.b];
           const sel = w.id === selWall;
-          return <polygon key={w.id} points={pts.map((q) => `${q.x},${q.y}`).join(' ')} fill={sel ? '#2f7de1' : '#2b2d31'} stroke={sel ? '#1b5fb8' : '#2b2d31'} strokeWidth={1} vectorEffect="non-scaling-stroke" />;
+          return <line key={w.id} x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke={sel ? '#2f7de1' : '#2b2d31'} strokeWidth={4} strokeLinecap="round" vectorEffect="non-scaling-stroke" />;
         })}
 
         {/* aperture */}
@@ -882,9 +876,9 @@ export function Editor2D() {
             <Guides h={hover} />
             {drawStart && (
               <>
-                <line x1={effStart(drawStart, norm(sub(hover, drawStart)), useStore.getState().wallThickness).pt.x} y1={effStart(drawStart, norm(sub(hover, drawStart)), useStore.getState().wallThickness).pt.y} x2={hover.x} y2={hover.y} stroke={hover.straight ? '#2a9d8f' : '#2f7de1'} strokeWidth={useStore.getState().wallThickness} strokeOpacity={0.5} />
+                <line x1={drawStart.x} y1={drawStart.y} x2={hover.x} y2={hover.y} stroke={hover.straight ? '#2a9d8f' : '#2f7de1'} strokeWidth={4} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                 <text x={(drawStart.x + hover.x) / 2} y={(drawStart.y + hover.y) / 2 - fs(10)} fontSize={fs(13)} textAnchor="middle" fill="#1b5fb8" fontWeight={700} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: fs(3) }}>
-                  {typed ? `${typed}▏` : fmtLen(clearLength(project, drawStart, hover, useStore.getState().wallThickness))}
+                  {typed ? `${typed}▏` : fmtLen(dist(drawStart, hover))}
                 </text>
               </>
             )}
@@ -940,7 +934,7 @@ export function Editor2D() {
       </svg>
 
       <div className="hint">
-        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: è lo spazio utile interno, lo spessore dei muri non conta mai · linea verde = dritto · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
+        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: è la lunghezza della linea, lo spessore dei muri non esiste · linea verde = dritto · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
         {(tool === 'door' || tool === 'window' || tool === 'arch') && 'Clicca su un muro per inserire'}
         {tool === 'garage' && 'Clicca su un muro per mettere il portone del garage (250 cm). Poi a destra scegli larghezza, verso e apertura'}
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
@@ -1021,7 +1015,7 @@ function nearestWall(p: Project, at: V, maxD: number): string | null {
   let bd = Infinity;
   for (const w of Object.values(p.walls)) {
     const pj = projectOnSegment(at, p.nodes[w.a], p.nodes[w.b]);
-    const d = pj.dist - w.thickness / 2;
+    const d = pj.dist;
     if (d < maxD && d < bd) {
       bd = d;
       best = w.id;
@@ -1307,34 +1301,14 @@ export function wallRoomSides(p: Project, wallId: string, der: Derived) {
   return out;
 }
 
-function WallDims({ p, wallId, der, z }: { p: Project; wallId: string; der: Derived; z: number }) {
+function WallDims({ p, wallId, z }: { p: Project; wallId: string; der: Derived; z: number }) {
   const w = p.walls[wallId];
-  const c = der.corners.get(wallId);
-  if (!w || !c) return null;
+  if (!w) return null;
   const A = p.nodes[w.a];
   const B = p.nodes[w.b];
-  const n = perp(norm(sub(B, A)));
-  const els: React.ReactElement[] = [];
-  const sidesCovered = new Set<number>();
-  // 1) per ogni stanza delimitata dal muro: la misura interna del lato, identica a quella in pianta
-  wallRoomSides(p, wallId, der).forEach(({ side }, i) => {
-    const dir = norm(sub(side.b, side.a));
-    const inward = perp(dir);
-    sidesCovered.add(dot(inward, n) > 0 ? 1 : -1);
-    const off = 26 / z;
-    const a2 = add(side.a, mul(inward, off));
-    const b2 = add(side.b, mul(inward, off));
-    els.push(dimLine(a2, b2, side.len, z, '#1b5fb8', 'r' + i));
-  });
-  // 2) facce senza stanza (esterno): lunghezza della faccia del muro
-  for (const sgn of [1, -1]) {
-    if (sidesCovered.has(sgn)) continue;
-    const fa = sgn === 1 ? c.aL : c.aR;
-    const fb = sgn === 1 ? c.bL : c.bR;
-    const off = mul(n, sgn * (22 / z));
-    els.push(dimLine(add(fa, off), add(fb, off), dist(fa, fb), z, '#6b7280', 'f' + sgn));
-  }
-  return <g style={{ pointerEvents: 'none' }}>{els}</g>;
+  const off = mul(perp(norm(sub(B, A))), 22 / z);
+  // lunghezza della linea del muro, da estremo a estremo
+  return <g style={{ pointerEvents: 'none' }}>{dimLine(add(A, off), add(B, off), dist(A, B), z, '#1b5fb8', 'L')}</g>;
 }
 
 function dimLine(a: V, b: V, len: number, z: number, color: string, key: string) {

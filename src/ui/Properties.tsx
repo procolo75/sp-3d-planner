@@ -12,8 +12,8 @@ import { parseLength } from '../import/pdf';
 import { LIGHT_COLORS, useStore } from '../model/store';
 import { suggestEntity, validEntityId } from '../ha/entities';
 import { TAP_LABELS, tapIssue } from '../ha/tap';
-import { fmtLen, wallRoomSides } from '../editor2d/Editor2D';
-import { openingClear, wallClearLength } from '../editor2d/snapping';
+import { fmtLen } from '../editor2d/Editor2D';
+import { openingClear } from '../editor2d/snapping';
 
 /** campo numerico che conferma su Invio/blur (accetta "3,62" in metri o "362" in cm se `length`) */
 function Num({ label, value, onChange, unit = 'cm', length, step = 1, tip }: { tip?: string; label: string; value: number; onChange: (v: number) => void; unit?: string; length?: boolean; step?: number }) {
@@ -48,7 +48,6 @@ function PocketDoorProps({ it }: { it: Item }) {
     <>
       <Num tip="Larghezza del passaggio libero (le due ante insieme)" label="Luce" value={luce} onChange={(v) => setSize(v, h)} />
       <Num tip="Altezza del passaggio (ante)" label="Altezza" value={h} onChange={(v) => setSize(luce, v)} />
-      <Num tip="Spessore del muro che ospita il controtelaio: si adegua da solo quando la porta si aggancia al muro" label="Spessore muro" value={it.d} onChange={(v) => st.updateItem(it.id, { d: Math.max(5, v) })} />
       <p className="muted small" style={{ margin: '2px 0 6px' }}>
         Controtelaio nel muro: {Math.round(it.w)} × {Math.round(it.h)} cm (2 × luce + 10)
       </p>
@@ -267,44 +266,16 @@ export function Properties() {
     const w = project.walls[sel.id];
     if (!w) return null;
     const L = dist(project.nodes[w.a], project.nodes[w.b]);
-    const sides = wallRoomSides(project, w.id, der);
     return (
       <aside className="props">
         <h3>Muro</h3>
-        {sides.length > 0 && (
-          <p className="muted small" style={{ margin: 0 }}>
-            Misure interne delle stanze, come in pianta:
-          </p>
-        )}
-        {sides.length > 0 ? (
-          sides.map(({ room, side }) => {
-            const name = der.roomLabel.get(room.key)?.name || 'stanza senza nome';
-            return (
-              <Num
-                key={room.key}
-                tip={`Misura interna del lato di «${name}», da angolo ad angolo: è la stessa scritta in pianta. Cambiala e il muro si allunga o accorcia della differenza.`}
-                label={`Lato ${name}`}
-                value={side.len}
-                length
-                onChange={(v) => st.setWallLength(w.id, Math.max(1, L + (v - side.len)))}
-              />
-            );
-          })
-        ) : (
-          (() => {
-            const c = wallClearLength(project, der.corners, w.id);
-            return (
-              <Num
-                tip="Lunghezza netta del muro, misurata dalla faccia dei muri a cui è agganciato. Scrivi es. 4,15 e premi Invio."
-                label="Lunghezza"
-                value={c.net}
-                length
-                onChange={(v) => st.setWallLength(w.id, Math.max(1, v + c.offA + c.offB))}
-              />
-            );
-          })()
-        )}
-        <Num label="Spessore" value={w.thickness} onChange={(v) => st.updateWall(w.id, { thickness: Math.max(2, v) })} />
+        <Num
+          tip="Lunghezza del muro, da un'estremità all'altra della linea. Scrivi es. 4,15 e premi Invio: i muri attaccati si spostano dritti."
+          label="Lunghezza"
+          value={L}
+          length
+          onChange={(v) => st.setWallLength(w.id, Math.max(1, v))}
+        />
         <Num label="Altezza" value={w.height} onChange={(v) => st.updateWall(w.id, { height: Math.max(10, v) })} />
         <span className="muted small">Colore della parete</span>
         <ColorPicker value={w.color ?? '#f4f1ec'} colors={WALL_COLORS} onChange={(c) => st.updateWall(w.id, { color: c })} />
@@ -375,7 +346,7 @@ export function Properties() {
         )}
         {o.type === 'window' && <Num label="Davanzale" value={o.sill} onChange={(v) => st.updateOpening(o.id, { sill: Math.max(0, v) })} />}
         {(() => {
-          // distanze nette dai muri ai lati (dalla faccia, mai dall'asse): sono le stesse scritte in pianta
+          // distanze dalla fine del muro ai due lati: sono le stesse scritte in pianta
           if (!wl) return null;
           const c = openingClear(project, der.corners, o);
           const A = project.nodes[wl.a];
@@ -392,7 +363,7 @@ export function Properties() {
             f.v === null ? null : (
               <Num
                 key={f.name}
-                tip={`Distanza netta dal bordo dell'apertura al muro a ${f.name}, come scritta in pianta (lo spessore dei muri non conta)`}
+                tip={`Distanza dal bordo dell'apertura alla fine del muro a ${f.name}, come scritta in pianta`}
                 label={`Dal muro a ${f.name}`}
                 value={Math.round(f.v * 10) / 10}
                 onChange={(v) => st.updateOpening(o.id, { offset: Math.max(o.width / 2, Math.min(wallLen - o.width / 2, f.set(Math.max(0, v)))) })}

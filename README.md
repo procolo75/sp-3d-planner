@@ -41,7 +41,7 @@ Funziona tutto nel browser: **niente da installare, niente account, niente serve
 ## Cosa puoi fare
 
 - **Dalla pianta al 3D**: Claude legge la pianta (PDF o foto, anche con le quote) e prepara la mappa; il programma costruisce la casa in 2D e 3D. Oppure disegni i muri a mano.
-- **Muri**: disegnali, spostali, cambia spessore, altezza e colore, e **abbattili**: le stanze si ricalcolano da sole con la superficie e le misure interne.
+- **Muri**: disegnali come linee (niente spessore da impostare), spostali, cambia altezza e colore, e **abbattili**: le stanze si ricalcolano da sole con superficie e misure.
 - **Porte, finestre, portefinestre, varchi e ante scorrevoli** (tipo IKEA SKYTTA, in vetro trasparente, satinato, bianco o specchio), con le **distanze dai muri** mentre le sposti. **Porte scorrevoli doppie a scomparsa** (le ante entrano nel muro) con luce e altezza su misura.
 - **Apri e chiudi le porte**: le porte a battente e quelle a scomparsa si aprono e chiudono con un'animazione, in pianta e in 3D.
 - **Mobili**: mobili generici e oltre **150 articoli IKEA** comuni (PAX, KALLAX, BILLY, MALM, KIVIK, METOD, GODMORGON…), piatti doccia e vasche in tutte le misure comuni, più il **mobile su misura** per qualsiasi altra cosa. Si appoggiano da soli ai muri e mostrano la distanza dalle pareti.
@@ -97,24 +97,24 @@ Scegli **Disegno a mano**: parti da un foglio vuoto con lo strumento **Muro** gi
 | Mostrare/nascondere le misure | menu **Vista → Quote delle stanze** |
 | Pianta, 3D o entrambi | pulsanti **2D**, **2D \| 3D**, **3D** in alto a destra |
 
-Le **quote rosse** dentro ogni stanza sono le misure interne di ogni lato, da angolo ad angolo, senza lo spessore dei muri.
+Le **quote rosse** dentro ogni stanza sono le misure di ogni lato, da angolo ad angolo, sulle linee dei muri.
 
 ## 3. Muri
 
 ### Disegnare
-1. Scegli **▭ Muro** (tasto **W**). Lo spessore dei nuovi muri si imposta nel campo **spessore** accanto.
+1. Scegli **▭ Muro** (tasto **W**). Il muro è una **linea**: lo spessore non esiste e non si imposta.
 2. Clicca dove inizia il muro, poi su ogni angolo. Il muro **si aggancia** da solo agli angoli e ai muri esistenti, si allinea in orizzontale/verticale e a 45° (compare la **guida verde tratteggiata** e il muro diventa verde: è dritto), e mostra la lunghezza mentre lo disegni.
-3. **Misura esatta**: mentre disegni scrivi la lunghezza e premi **Invio** (es. `3,62` = 3,62 m, `362` = 362 cm). È sempre lo **spazio utile**, da faccia a faccia: lo spessore dei muri non entra mai nei numeri. Un muro da 1,10 misura 1,10 anche se finisce libero; due tratti dritti da 1,10 e 1,00 fanno 2,10; una stanza disegnata 4,00 × 3,00 ha dentro esattamente 4,00 × 3,00 (all'angolo l'app allunga da sola il muro di mezzo spessore).
+3. **Misura esatta**: mentre disegni scrivi la lunghezza e premi **Invio** (es. `3,62` = 3,62 m, `362` = 362 cm). La misura è la lunghezza della linea, punto: un muro da 1,10 misura 1,10, una stanza disegnata 4,00 × 3,00 è 4,00 × 3,00 e fa 12,00 m².
 4. Per finire premi **Esc** o fai **doppio clic**. Tieni premuto **Shift** per disegnare senza agganci.
 
 Se un muro nuovo attraversa o tocca un altro muro, gli incroci vengono creati da soli e le stanze si chiudono.
 
 ### Modificare
-Seleziona una porta o finestra: nel pannello trovi **Dal muro a sinistra/destra** (o sopra/sotto), le distanze nette dai muri; distanza + larghezza + distanza = misura del muro.
+Seleziona una porta o finestra: nel pannello trovi **Dal muro a sinistra/destra** (o sopra/sotto), le distanze dai muri; distanza + larghezza + distanza = misura del muro.
 
 Seleziona un muro: nel pannello a destra trovi
-- le **misure interne dei lati delle stanze** che il muro delimita (le stesse scritte in pianta): cambiandole, il muro si allunga o si accorcia della differenza e i muri attaccati si spostano paralleli (la pianta non si storce mai; per inclinare un muro trascina i pallini);
-- **spessore**, **altezza** e **colore** della parete;
+- la **lunghezza**: cambiandola, il muro si allunga o si accorcia e i muri attaccati si spostano paralleli (la pianta non si storce mai; per inclinare un muro trascina i pallini);
+- **altezza** e **colore** della parete;
 - l'elenco delle **porte e finestre su quel muro**, ognuna con *Seleziona* ed *Elimina* (utile se due aperture sono una sopra l'altra).
 
 Puoi anche **trascinare il muro** per spostarlo parallelamente, o **trascinare i pallini** agli angoli per spostare gli angoli.

@@ -59,7 +59,6 @@ export function Toolbar() {
   const locked = useStore((s) => s.locked);
   const nCameras = useStore((s) => Object.keys(s.project.cameras ?? {}).length);
   const bg = useStore((s) => s.project.background);
-  const wallThickness = useStore((s) => s.wallThickness);
   const [dialog, setDialog] = useState<'save' | 'list' | null>(null);
   // nome del file collegato (si aggiorna quando cambia lo stato di salvataggio)
   useStore((st) => st.savedProject);
@@ -199,11 +198,6 @@ export function Toolbar() {
               {x.label}
             </button>
           ))}
-          <label className="mini" data-tip="Spessore dei NUOVI muri che disegni. Per cambiare un muro esistente selezionalo e modificalo nel pannello a destra.">
-            spessore
-            <input type="number" min={2} max={80} value={wallThickness} onChange={(e) => st().set('wallThickness', Math.max(2, +e.target.value || 12))} />
-            cm
-          </label>
         </div>
         <div className="group">
           <button onClick={() => undo()} data-tip={`Annulla l'ultima modifica (${MOD}Z)`} aria-label="Annulla">

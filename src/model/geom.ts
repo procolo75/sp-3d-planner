@@ -288,8 +288,9 @@ export function computeRooms(p: Project): Room[] {
   for (const { cycle, poly, area: A, wallBetween } of planarFaces(p)) {
     // con y verso il basso e questa regola di percorrenza, le facce interne hanno area positiva
     if (A <= 1) continue;
-    const thick = cycle.map((id, i) => wallBetween.get(edgeKey(id, cycle[(i + 1) % cycle.length]))?.thickness ?? 10);
-    const inner = offsetPolygonInward(poly, thick.map((t) => t / 2));
+    void wallBetween;
+    // lo spessore dei muri non conta: la stanza è quella disegnata dalle linee
+    const inner = poly.slice();
     const area = Math.abs(polygonArea(inner));
     rooms.push({ key: [...cycle].sort().join(','), nodeIds: cycle, poly, inner, area });
   }

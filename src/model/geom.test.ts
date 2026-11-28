@@ -20,8 +20,8 @@ describe('stanze', () => {
     rect(p, 0, 0, 400, 300);
     const rooms = computeRooms(p);
     expect(rooms).toHaveLength(1);
-    // interno: (400-20) x (300-20)
-    expect(rooms[0].area).toBeCloseTo(380 * 280, 0);
+    // misurata sulle linee: lo spessore dei muri non conta
+    expect(rooms[0].area).toBeCloseTo(400 * 300, 0);
   });
 
   it('un muro divisorio crea due stanze, abbatterlo le unisce', () => {
@@ -97,14 +97,14 @@ describe('mobili contro il muro', () => {
     const it: Item = { id: 'x', catalogId: 'ikea-pax150', x: 70, y: 40, z: 0, rotation: 0, w: 150, d: 58, h: 236 };
     const m = magnetToWall(p, it)!;
     expect(m).not.toBeNull();
-    // contro il muro sinistro (filo interno x=10): centro a 10 + 58/2
-    expect(m.x).toBeCloseTo(39, 0);
-    // non entra nel muro in alto (filo interno y=10): centro almeno a 10 + 75
-    expect(m.y).toBeGreaterThanOrEqual(84.9);
+    // contro la linea del muro sinistro (x=0): centro a 58/2
+    expect(m.x).toBeCloseTo(29, 0);
+    // non attraversa la linea del muro in alto (y=0): centro almeno a 75
+    expect(m.y).toBeGreaterThanOrEqual(74.9);
   });
 });
 
-import { openingDistances } from '../editor2d/snapping';
+import { openingClear, openingDistances } from '../editor2d/snapping';
 
 describe('distanze delle aperture', () => {
   it('porta sul muro in alto: distanze dal filo dei muri laterali, solo dentro la stanza', () => {
@@ -116,8 +116,8 @@ describe('distanze delle aperture', () => {
     const offset = Math.abs(200 - startX);
     const d = openingDistances(p, computeWallCorners(p), { wallId: top.id, offset, width: 80 });
     const inside = d.map((x) => Math.round(x.dist)).sort((a, b) => a - b);
-    // filo interno muri laterali a x=10 e x=390 → 160-10 = 150 e 390-240 = 150 (all'esterno nessuna misura)
-    expect(inside).toEqual([150, 150]);
+    // linee dei muri laterali a x=0 e x=400 → 160 e 160 (uguali dai due lati: una misura per parte)
+    expect(inside).toEqual([160, 160]);
   });
 });
 
@@ -134,7 +134,7 @@ describe('lati delle stanze', () => {
     normalize(p);
     const room = computeRooms(p).find((r) => r.area > 100000)!;
     const sides = roomSides(room).map((s) => Math.round(s.len)).sort((x, y) => x - y);
-    expect(sides).toEqual([280, 280, 580, 580]);
+    expect(sides).toEqual([300, 300, 600, 600]);
   });
 });
 
@@ -175,5 +175,26 @@ describe('porte a scomparsa: misure su misura e apertura', () => {
     p.items.d = { id: 'd', catalogId: 'pocket2-120', x: 300, y: 0, z: 0, rotation: 0, d: 20, ...pocketItemSize(150, 230) };
     const [o] = pocketOpenings(p);
     expect([o.width, o.height]).toEqual([150, 230]);
+  });
+});
+
+describe('distanze delle aperture con un muro attaccato da fuori', () => {
+  it('dentro la stanza il muro attaccato fuori non spezza la misura', () => {
+    const p = draft(emptyProject());
+    rect(p, 0, 0, 600, 300, 20);
+    const a = addNode(p, { x: 300, y: 0 });
+    const b = addNode(p, { x: 300, y: -200 });
+    addWall(p, a, b, 10, 280);
+    normalize(p);
+    const top = Object.values(p.walls).find((w) => p.nodes[w.a].y === 0 && p.nodes[w.b].y === 0 && Math.min(p.nodes[w.a].x, p.nodes[w.b].x) === 0)!;
+    const A = p.nodes[top.a];
+    const offset = Math.abs(100 - A.x);
+    const d = openingDistances(p, computeWallCorners(p), { wallId: top.id, offset, width: 80 });
+    const dists = d.map((x) => Math.round(x.dist)).sort((x, y) => x - y);
+    // verso sinistra 60 (uguale dai due lati); verso destra: fuori 160 (muro a x=300), dentro 460 (fino a x=600)
+    expect(dists).toEqual([60, 160, 460]);
+    // nel pannello valgono le misure del lato della stanza
+    const c = openingClear(p, computeWallCorners(p), { wallId: top.id, offset, width: 80 });
+    expect([c.toA, c.toB].map((x) => Math.round(x!)).sort((x, y) => x - y)).toEqual([60, 460]);
   });
 });
