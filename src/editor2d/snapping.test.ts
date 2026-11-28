@@ -38,13 +38,21 @@ import { addNode as addN, addWall as addW, draft as dr } from '../model/ops';
 import { emptyProject as ep } from '../model/types';
 
 describe('pilastri', () => {
-  it("si agganciano all'angolo vicino, poi alla linea del muro, lontano restano liberi", () => {
+  it("si appoggiano alla linea del muro, entrano negli angoli, lontano restano liberi", () => {
     const p = dr(ep());
     const a = addN(p, { x: 0, y: 0 });
     const b = addN(p, { x: 400, y: 0 });
+    const c = addN(p, { x: 400, y: 300 });
     addW(p, a, b, 20, 280);
-    expect(magnetPillar(p, { x: 10, y: 12, rotation: 0 })).toMatchObject({ x: 0, y: 0 });
-    expect(magnetPillar(p, { x: 200, y: 12, rotation: 0 })).toMatchObject({ x: 200, y: 0 });
-    expect(magnetPillar(p, { x: 200, y: 80, rotation: 0 })).toBeNull();
+    addW(p, b, c, 20, 280);
+    const it = { rotation: 0, w: 30, d: 30 };
+    // parete: faccia sulla linea y=0, dal lato del puntatore
+    expect(magnetPillar(p, { ...it, x: 200, y: 12 })).toMatchObject({ x: 200, y: 15 });
+    expect(magnetPillar(p, { ...it, x: 200, y: -12 })).toMatchObject({ x: 200, y: -15 });
+    // angolo interno (x<400, y>0): il pilastro tocca le due linee
+    const m = magnetPillar(p, { ...it, x: 390, y: 20 })!;
+    expect([Math.round(m.x), Math.round(m.y)]).toEqual([385, 15]);
+    // lontano dai muri
+    expect(magnetPillar(p, { ...it, x: 200, y: 120 })).toBeNull();
   });
 });

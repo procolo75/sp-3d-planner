@@ -29,7 +29,7 @@ export interface CatalogItem {
    * passaggio largo `luce` e alto `h` (misure sulle dimensioni di default, scalano con w/h)
    */
   pocket?: { luce: number; h: number; glass?: boolean };
-  /** elemento della casa (pilastro): alto come i muri, si aggancia agli angoli e ai muri, in 3D sembra un muro */
+  /** elemento della casa (pilastro): alto come i muri, si appoggia alle pareti e negli angoli, in 3D sembra un muro */
   structure?: boolean;
 }
 

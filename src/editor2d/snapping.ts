@@ -97,38 +97,54 @@ export function magnetToWall(p: Project, it: Item, _der?: Derived): { x: number;
  * quanto il muro (ritorna anche la profondità `d`). Resta tutto dentro al muro se ci sta.
  */
 /**
- * Pilastro: il centro va sull'angolo dei muri più vicino (entro 30 cm), altrimenti sulla linea
- * del muro (entro 20 cm, girato come il muro). Ritorna null lontano dai muri: resta dov'è.
+ * Pilastro: si appoggia ai muri come un mobile, con la faccia sulla linea del muro (lo spessore
+ * non conta). Vicino a un angolo entra nell'angolo, dal lato in cui si trova il puntatore;
+ * vicino a una parete le si appoggia dal lato del puntatore. Lontano dai muri resta libero (null).
  */
-export function magnetPillar(p: Project, it: Pick<Item, 'x' | 'y' | 'rotation'>): { x: number; y: number; rotation: number } | null {
+export function magnetPillar(p: Project, it: Pick<Item, 'x' | 'y' | 'rotation' | 'w' | 'd'>): { x: number; y: number; rotation: number } | null {
   const c = { x: it.x, y: it.y };
-  let node: V | null = null;
-  let nd = 30;
+  const half = Math.max(it.w, it.d) / 2;
+  const dirOf = (w: { a: string; b: string }) => norm(sub(p.nodes[w.b], p.nodes[w.a]));
+  const sgn = (v: number) => (v < 0 ? -1 : 1);
+
+  // angolo: un nodo con almeno un muro, vicino al puntatore
+  let node: { id: string; x: number; y: number } | null = null;
+  let nd = half + 25;
   for (const n of Object.values(p.nodes)) {
     const d = dist(n, c);
-    if (d < nd) {
+    if (d < nd && Object.values(p.walls).some((w) => w.a === n.id || w.b === n.id)) {
       nd = d;
       node = n;
     }
   }
-  // gira il pilastro come il primo muro che parte dall'angolo
-  const wallRot = (w: { a: string; b: string }) => {
+  if (node) {
+    const w = Object.values(p.walls).find((q) => q.a === node!.id || q.b === node!.id)!;
+    const u = dirOf(w);
+    const n = perp(u); // asse y locale del pilastro (rotazione = angolo del muro)
+    const rel = sub(c, node);
+    const su = sgn(rel.x * u.x + rel.y * u.y);
+    const sn = sgn(rel.x * n.x + rel.y * n.y);
+    const pos = add(node, add(mul(u, (su * it.w) / 2), mul(n, (sn * it.d) / 2)));
+    return { x: Math.round(pos.x * 2) / 2, y: Math.round(pos.y * 2) / 2, rotation: Math.atan2(u.y, u.x) };
+  }
+
+  // parete: faccia del pilastro sulla linea del muro, dal lato del puntatore
+  let best: { x: number; y: number; rotation: number } | null = null;
+  let bd = half + 20;
+  for (const w of Object.values(p.walls)) {
     const A = p.nodes[w.a];
     const B = p.nodes[w.b];
-    return Math.atan2(B.y - A.y, B.x - A.x);
-  };
-  if (node) {
-    const w = Object.values(p.walls).find((q) => p.nodes[q.a] === node || p.nodes[q.b] === node);
-    return { x: node.x, y: node.y, rotation: w ? wallRot(w) : it.rotation };
-  }
-  let best: { x: number; y: number; rotation: number } | null = null;
-  let bd = 20;
-  for (const w of Object.values(p.walls)) {
-    const pj = projectOnSegment(c, p.nodes[w.a], p.nodes[w.b]);
-    if (pj.dist < bd) {
-      bd = pj.dist;
-      best = { x: pj.point.x, y: pj.point.y, rotation: wallRot(w) };
-    }
+    const pj = projectOnSegment(c, A, B);
+    if (pj.dist >= bd || pj.t <= 0 || pj.t >= 1) continue;
+    const u = dirOf(w);
+    const n = perp(u);
+    const sn = sgn((c.x - pj.point.x) * n.x + (c.y - pj.point.y) * n.y);
+    // non oltre gli estremi del muro
+    const L = dist(A, B);
+    const along = Math.max(it.w / 2, Math.min(L - it.w / 2, pj.t * L));
+    const pos = add(add(A, mul(u, along)), mul(n, (sn * it.d) / 2));
+    bd = pj.dist;
+    best = { x: Math.round(pos.x * 2) / 2, y: Math.round(pos.y * 2) / 2, rotation: Math.atan2(u.y, u.x) };
   }
   return best;
 }

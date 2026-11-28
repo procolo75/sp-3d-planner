@@ -143,7 +143,7 @@ Le stanze si formano da sole quando i muri chiudono uno spazio.
 | **⌒ Varco** | passaggio senza porta |
 | **⇆ Scorrevole** | ante scorrevoli tipo IKEA **SKYTTA** |
 | **🚘 Garage** | portone del garage basculante/sezionale (250×215 cm) |
-| **▪ Pilastro** | pilastro 30×30 alto come i muri: si aggancia agli angoli e alle linee dei muri; resta attivo per metterne altri (Esc per finire). A destra misure e forma (quadrato o tondo) |
+| **▪ Pilastro** | pilastro 30×30 alto come i muri: si appoggia alle pareti ed entra negli angoli dal lato dove clicchi (faccia sulla linea del muro); resta attivo per metterne altri (Esc per finire). A destra misure e forma (quadrato o tondo) |
 
 **Inserire**: scegli lo strumento e clicca sul muro. Mentre muovi il mouse vedi le **distanze dai muri vicini** (misurate fino al filo del muro, su entrambi i lati).
 
