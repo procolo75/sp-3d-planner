@@ -104,12 +104,14 @@ Le **quote rosse** dentro ogni stanza sono le misure interne di ogni lato, da an
 ### Disegnare
 1. Scegli **▭ Muro** (tasto **W**). Lo spessore dei nuovi muri si imposta nel campo **spessore** accanto.
 2. Clicca dove inizia il muro, poi su ogni angolo. Il muro **si aggancia** da solo agli angoli e ai muri esistenti, si allinea in orizzontale/verticale e a 45° (compare la **guida verde tratteggiata** e il muro diventa verde: è dritto), e mostra la lunghezza mentre lo disegni.
-3. **Misura esatta**: mentre disegni scrivi la lunghezza e premi **Invio** (es. `3,62` = 3,62 m, `362` = 362 cm). È sempre lo **spazio utile interno**, da faccia a faccia: lo spessore dei muri lo aggiunge l'app. Una stanza disegnata con 4,00 × 3,00 ha dentro esattamente 4,00 × 3,00.
+3. **Misura esatta**: mentre disegni scrivi la lunghezza e premi **Invio** (es. `3,62` = 3,62 m, `362` = 362 cm). È sempre lo **spazio utile**, da faccia a faccia: lo spessore dei muri non entra mai nei numeri. Un muro da 1,10 misura 1,10 anche se finisce libero; due tratti dritti da 1,10 e 1,00 fanno 2,10; una stanza disegnata 4,00 × 3,00 ha dentro esattamente 4,00 × 3,00 (all'angolo l'app allunga da sola il muro di mezzo spessore).
 4. Per finire premi **Esc** o fai **doppio clic**. Tieni premuto **Shift** per disegnare senza agganci.
 
 Se un muro nuovo attraversa o tocca un altro muro, gli incroci vengono creati da soli e le stanze si chiudono.
 
 ### Modificare
+Seleziona una porta o finestra: nel pannello trovi **Dal muro a sinistra/destra** (o sopra/sotto), le distanze nette dai muri; distanza + larghezza + distanza = misura del muro.
+
 Seleziona un muro: nel pannello a destra trovi
 - le **misure interne dei lati delle stanze** che il muro delimita (le stesse scritte in pianta): cambiandole, il muro si allunga o si accorcia della differenza e i muri attaccati si spostano paralleli (la pianta non si storce mai; per inclinare un muro trascina i pallini);
 - **spessore**, **altezza** e **colore** della parete;

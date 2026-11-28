@@ -196,18 +196,38 @@ export function openingDistances(p: Project, corners: Map<string, WallCorners>, 
     }
     return best;
   };
-  const out: { from: V; to: V; dist: number; side?: V }[] = [];
+  // estremo libero del muro (nessun altro muro attaccato): la distanza arriva alla punta del muro
+  const deg = (nid: string) => Object.values(p.walls).filter((q) => q.a === nid || q.b === nid).length;
+  const L = Math.hypot(B.x - A.x, B.y - A.y);
+  const tip = { [-1]: deg(w.a) === 1 ? o.offset - o.width / 2 : Infinity, [1]: deg(w.b) === 1 ? L - o.offset - o.width / 2 : Infinity };
+  const out: { from: V; to: V; dist: number; side?: V; towardsB?: boolean }[] = [];
   for (const side of [1, -1]) {
     // poco fuori dalla faccia del muro, nella stanza da quel lato
     const off = mul(n, side * (w.thickness / 2 + 1));
     for (const s of [-1, 1]) {
       const from = add(add(A, mul(dir, o.offset + (s * o.width) / 2)), off);
       const d = mul(dir, s);
-      const t = ray(from, d);
-      if (t <= max) out.push({ from, to: add(from, mul(d, Math.max(0, t))), dist: Math.max(0, t), side: mul(n, side) });
+      const t = Math.min(ray(from, d), tip[s as -1 | 1]);
+      if (t <= max) out.push({ from, to: add(from, mul(d, Math.max(0, t))), dist: Math.max(0, t), side: mul(n, side), towardsB: s > 0 });
     }
   }
   return out;
+}
+
+/**
+ * Distanze nette di un'apertura dai muri ai due lati (verso il nodo a e verso il nodo b), dalla faccia,
+ * mai dall'asse: la più corta tra le due facce del muro. null se da quel lato non c'è nulla.
+ */
+export function openingClear(p: Project, corners: Map<string, WallCorners>, o: Pick<Opening, 'wallId' | 'offset' | 'width'>) {
+  const w = p.walls[o.wallId];
+  if (!w) return { toA: null, toB: null };
+  let toA: number | null = null;
+  let toB: number | null = null;
+  for (const d of openingDistances(p, corners, o)) {
+    if (d.towardsB) toB = toB === null ? d.dist : Math.min(toB, d.dist);
+    else toA = toA === null ? d.dist : Math.min(toA, d.dist);
+  }
+  return { toA, toB };
 }
 
 /**
@@ -253,7 +273,7 @@ export function faceOffset(p: Project, _corners: Map<string, WallCorners> | null
 }
 
 /** il punto tocca un muro o un nodo esistente? */
-function onGeometry(p: Project, at: V, excludeWall?: string) {
+export function onGeometry(p: Project, at: V, excludeWall?: string) {
   for (const w of Object.values(p.walls)) {
     if (w.id === excludeWall) continue;
     const A = p.nodes[w.a];
@@ -264,18 +284,6 @@ function onGeometry(p: Project, at: V, excludeWall?: string) {
     if (Math.hypot(A.x + ab.x * t - at.x, A.y + ab.y * t - at.y) < 0.5) return true;
   }
   return false;
-}
-
-/**
- * Quanto sottrarre all'estremo di un muro per avere lo spazio utile (da faccia a faccia):
- * - agganciato a un muro esistente: fino alla sua faccia;
- * - estremo libero: metà spessore, perché lì arriverà il muro che chiude l'angolo.
- * Così le misure scritte sono sempre quelle interne, senza contare lo spessore dei muri.
- */
-export function endOffset(p: Project, at: V, dir: V, thickness: number, excludeWall?: string): number {
-  const f = faceOffset(p, null, at, dir, excludeWall);
-  if (f > 0.01) return f;
-  return onGeometry(p, at, excludeWall) ? 0 : thickness / 2;
 }
 
 /** Lunghezza netta di un muro esistente: dalla faccia dei muri a cui è agganciato ai due estremi */

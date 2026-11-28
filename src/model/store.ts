@@ -66,7 +66,8 @@ interface State {
   newProject(): void;
   rename(name: string): void;
 
-  addWallSegment(from: SnapPoint, to: SnapPoint): ID | null;
+  /** `moves`: nodi da spostare prima, nello stesso passo di annullamento (allungo dell'angolo) */
+  addWallSegment(from: SnapPoint, to: SnapPoint, moves?: { from: V; to: V }[]): ID | null;
   updateWall(id: ID, patch: Partial<Wall>): void;
   /** stesso colore a tutti i muri della casa */
   setAllWallsColor(color: string): void;
@@ -190,9 +191,13 @@ export const useStore = create<State>()(
         },
         rename: (name) => mutate((p) => (p.name = name)),
 
-        addWallSegment: (from, to) => {
+        addWallSegment: (from, to, moves) => {
           let id: ID | null = null;
           mutate((p) => {
+            for (const m of moves ?? []) {
+              const n = Object.values(p.nodes).find((q) => Math.hypot(q.x - m.from.x, q.y - m.from.y) < 0.5);
+              if (n) p.nodes[n.id] = { ...n, x: m.to.x, y: m.to.y };
+            }
             const a = resolve(p, from);
             const b = resolve(p, to);
             const { wallThickness, wallHeight } = get();

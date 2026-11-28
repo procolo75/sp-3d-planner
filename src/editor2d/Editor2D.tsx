@@ -8,7 +8,8 @@ import type { Camera, Item, Light, Opening, Project, Sensor } from '../model/typ
 import { cameraCoverage, useCoverage } from '../model/coverage';
 import { parseLength } from '../import/pdf';
 import { detectOnBackground } from '../import/runDetection';
-import { endOffset, itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistances } from './snapping';
+import { clearLength, effStart, planSegment, snapFrom, startChain, typedEnd, type ChainStart, type DrawPt } from './drawChain';
+import { itemCorners, magnetCamera, magnetToWall, openingDistances, wallDistances } from './snapping';
 
 const st0 = () => useStore.getState();
 
@@ -56,7 +57,20 @@ export function Editor2D() {
   viewRef.current = view;
   const [hover, setHover] = useState<(SnapPoint & { guides?: V[][]; straight?: V[] }) | null>(null);
   const [rawHover, setRawHover] = useState<V | null>(null);
-  const [drawStart, setDrawStart] = useState<SnapPoint | null>(null);
+  const [drawStart, setDrawStart] = useState<DrawPt | null>(null);
+  const chainRef = useRef<ChainStart>(null);
+  useEffect(() => {
+    if (!drawStart) chainRef.current = null;
+  }, [drawStart]);
+
+  /** aggiunge un tratto della catena tenendo le misure come spazio utile (vedi drawChain.ts) */
+  const commitSegment = (s: DrawPt, e: SnapPoint, typedSeg: boolean) => {
+    const st = useStore.getState();
+    const plan = planSegment(st.project, s, e, st.wallThickness, chainRef.current, typedSeg);
+    chainRef.current = plan.chain;
+    st.addWallSegment(plan.from, plan.to, plan.moves);
+    setDrawStart(plan.next);
+  };
   const [typed, setTyped] = useState('');
   const [calib, setCalib] = useState<V[]>([]);
   const [roi, setRoi] = useState<{ a: V; b: V } | null>(null);
@@ -305,12 +319,12 @@ export function Editor2D() {
     }
 
     if (st.tool === 'wall') {
-      const sp = snap(p, { from: drawStart, free: e.shiftKey });
+      const sp = snap(p, { from: snapFrom(drawStart, p, st.wallThickness), free: e.shiftKey });
       if (!drawStart) {
         setDrawStart(sp);
+        chainRef.current = startChain(st.project, sp);
       } else if (dist(sp, drawStart) > 1) {
-        st.addWallSegment(drawStart, sp);
-        setDrawStart({ x: sp.x, y: sp.y });
+        commitSegment(drawStart, sp, false);
         setTyped('');
       }
       return;
@@ -322,7 +336,7 @@ export function Editor2D() {
         const w = st.project.walls[h];
         const L = dist(st.project.nodes[w.a], st.project.nodes[w.b]);
         const def = OPENING_WIDTH[st.tool];
-        const off = clamp(offsetOnWall(st.project, h, p), def / 2, L - def / 2);
+        const off = clamp(Math.round(offsetOnWall(st.project, h, p)), def / 2, L - def / 2);
         const id = st.addOpening(h, st.tool, off);
         st.select({ kind: 'opening', id });
       }
@@ -502,7 +516,7 @@ export function Editor2D() {
       }
       return;
     }
-    if (st.tool === 'wall') setHover(snap(p, { from: drawStart, free: e.shiftKey }));
+    if (st.tool === 'wall') setHover(snap(p, { from: snapFrom(drawStart, p, st.wallThickness), free: e.shiftKey }));
     else setHover(null);
   };
 
@@ -641,13 +655,11 @@ export function Editor2D() {
           const s = drawStartRef.current;
           const h = hoverRef.current;
           if (L && s) {
-            const dir = h && dist(h, s) > 0.5 ? norm(sub(h, s)) : v(1, 0);
-            // la misura è lo spazio utile: dalla faccia del muro di partenza alla faccia del muro
-            // che chiuderà l'angolo in fondo (metà spessore), mai dall'asse
-            const T = st.wallThickness;
-            const end = add(s, mul(dir, endOffset(st.project, s, dir, T) + L + T / 2));
-            st.addWallSegment(s, end);
-            setDrawStart({ x: end.x, y: end.y });
+            const from = snapFrom(s, h ?? s, st.wallThickness) ?? s;
+            const dir = h && dist(h, from) > 0.5 ? norm(sub(h, from)) : v(1, 0);
+            // la misura è lo spazio utile: dalla faccia del muro di partenza (mai dall'asse);
+            // se l'estremo resta libero è la punta del muro, se poi si gira l'angolo si allunga da solo
+            commitSegment(s, typedEnd(st.project, s, dir, L, st.wallThickness), true);
           }
           setTyped('');
           return;
@@ -870,7 +882,7 @@ export function Editor2D() {
             <Guides h={hover} />
             {drawStart && (
               <>
-                <line x1={drawStart.x} y1={drawStart.y} x2={hover.x} y2={hover.y} stroke={hover.straight ? '#2a9d8f' : '#2f7de1'} strokeWidth={useStore.getState().wallThickness} strokeOpacity={0.5} />
+                <line x1={effStart(drawStart, norm(sub(hover, drawStart)), useStore.getState().wallThickness).pt.x} y1={effStart(drawStart, norm(sub(hover, drawStart)), useStore.getState().wallThickness).pt.y} x2={hover.x} y2={hover.y} stroke={hover.straight ? '#2a9d8f' : '#2f7de1'} strokeWidth={useStore.getState().wallThickness} strokeOpacity={0.5} />
                 <text x={(drawStart.x + hover.x) / 2} y={(drawStart.y + hover.y) / 2 - fs(10)} fontSize={fs(13)} textAnchor="middle" fill="#1b5fb8" fontWeight={700} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: fs(3) }}>
                   {typed ? `${typed}▏` : fmtLen(clearLength(project, drawStart, hover, useStore.getState().wallThickness))}
                 </text>
@@ -928,7 +940,7 @@ export function Editor2D() {
       </svg>
 
       <div className="hint">
-        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: è lo spazio utile interno, lo spessore dei muri si aggiunge da solo · linea verde = dritto · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
+        {tool === 'wall' && (drawStart ? 'Clicca per il prossimo punto · digita una misura (es. 3,62) + Invio: è lo spazio utile interno, lo spessore dei muri non conta mai · linea verde = dritto · Esc/doppio clic per terminare · Shift = senza aggancio' : 'Clicca per iniziare un muro: agganciati a un estremo (●) o a metà (◆) di un muro, o su un punto qualsiasi del muro guardando le distanze')}
         {(tool === 'door' || tool === 'window' || tool === 'arch') && 'Clicca su un muro per inserire'}
         {tool === 'garage' && 'Clicca su un muro per mettere il portone del garage (250 cm). Poi a destra scegli larghezza, verso e apertura'}
         {tool === 'sliding' && 'Clicca su un muro per inserire le ante scorrevoli (SKYTTA). Poi a destra scegli larghezza e altezza; se la fai larga quanto il muro lo sostituisce tutto'}
@@ -992,16 +1004,6 @@ function clamp(x: number, a: number, b: number) {
 
 export function fmtLen(cm: number) {
   return (cm / 100).toFixed(2).replace('.', ',');
-}
-
-/** lunghezza netta di un muro in disegno: da faccia a faccia dei muri a cui è agganciato */
-function clearLength(p: Project, s: SnapPoint, e: SnapPoint, T: number) {
-  const L = dist(s, e);
-  if (L < 0.5) return L;
-  const dir = norm(sub(e, s));
-  const a = endOffset(p, s, dir, T);
-  const b = endOffset(p, e, mul(dir, -1), T);
-  return Math.max(0, L - a - b);
 }
 
 /** guide: allineamenti con altri nodi (arancio) e linea dritta orizzontale/verticale/45° (verde) */

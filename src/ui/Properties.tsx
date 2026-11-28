@@ -13,7 +13,7 @@ import { LIGHT_COLORS, useStore } from '../model/store';
 import { suggestEntity, validEntityId } from '../ha/entities';
 import { TAP_LABELS, tapIssue } from '../ha/tap';
 import { fmtLen, wallRoomSides } from '../editor2d/Editor2D';
-import { wallClearLength } from '../editor2d/snapping';
+import { openingClear, wallClearLength } from '../editor2d/snapping';
 
 /** campo numerico che conferma su Invio/blur (accetta "3,62" in metri o "362" in cm se `length`) */
 function Num({ label, value, onChange, unit = 'cm', length, step = 1, tip }: { tip?: string; label: string; value: number; onChange: (v: number) => void; unit?: string; length?: boolean; step?: number }) {
@@ -374,7 +374,32 @@ export function Properties() {
           </>
         )}
         {o.type === 'window' && <Num label="Davanzale" value={o.sill} onChange={(v) => st.updateOpening(o.id, { sill: Math.max(0, v) })} />}
-        <Num tip="Distanza del centro dell'apertura dall'inizio del muro, in cm" label="Posizione" value={o.offset} onChange={(v) => st.updateOpening(o.id, { offset: v })} />
+        {(() => {
+          // distanze nette dai muri ai lati (dalla faccia, mai dall'asse): sono le stesse scritte in pianta
+          if (!wl) return null;
+          const c = openingClear(project, der.corners, o);
+          const A = project.nodes[wl.a];
+          const B = project.nodes[wl.b];
+          const horiz = Math.abs(B.x - A.x) >= Math.abs(B.y - A.y);
+          const aFirst = horiz ? A.x <= B.x : A.y <= B.y;
+          const names = horiz ? ['sinistra', 'destra'] : ['sopra', 'sotto'];
+          const fields = [
+            { name: aFirst ? names[0] : names[1], v: c.toA, set: (v: number) => o.offset + (v - c.toA!) },
+            { name: aFirst ? names[1] : names[0], v: c.toB, set: (v: number) => o.offset - (v - c.toB!) },
+          ];
+          if (!aFirst) fields.reverse();
+          return fields.map((f) =>
+            f.v === null ? null : (
+              <Num
+                key={f.name}
+                tip={`Distanza netta dal bordo dell'apertura al muro a ${f.name}, come scritta in pianta (lo spessore dei muri non conta)`}
+                label={`Dal muro a ${f.name}`}
+                value={Math.round(f.v * 10) / 10}
+                onChange={(v) => st.updateOpening(o.id, { offset: Math.max(o.width / 2, Math.min(wallLen - o.width / 2, f.set(Math.max(0, v)))) })}
+              />
+            ),
+          );
+        })()}
         {o.type !== 'arch' && (
           <>
             <EntityField value={o.haEntity} domain="binary_sensor" onChange={(v) => st.updateOpening(o.id, { haEntity: v })} tip="Sensore di apertura in Home Assistant (es. binary_sensor.porta_ingresso): sulla mappa la porta diventa rossa quando è aperta. Lascia vuoto se non c'è." />
